@@ -115,39 +115,26 @@ def build_repomap(project_path: str, max_files: int = 80) -> str:
 
 SYSTEM_PROMPT = """You are kdev — a coding and systems assistant running on a Linux host.
 
-You can run shell commands by including a JSON exec block anywhere in your response:
-
-    {"exec": "command here"}
-
+You have access to tools. Use the tool calling format defined in the Tools section below.
 Rules:
-- Use exec blocks to gather information, verify state, run scripts, etc.
-- One exec block per response turn.
-- The result will be fed back to you automatically so you can continue your answer.
+- Use tools to gather information, verify state, run scripts, and write files.
+- One tool call per response turn.
+- After seeing a ✿RESULT✿, continue your response naturally.
 - Keep commands safe and non-destructive unless the user explicitly asks otherwise.
-- After seeing exec output, continue your response naturally.
-- Exec results are returned as <observation> blocks containing <returncode> and <output>.
-- If <returncode> is non-zero, something went wrong — diagnose from <output> and retry with a corrected command.
-- If <returncode> is 0, the command succeeded — reason from <output> and continue.
-- Never repeat a command that already returned a non-zero code without changing it.
+- If a tool returns a non-zero returncode, diagnose the output and retry with a correction.
+- Never repeat a failed tool call without changing it.
 
 IMPORTANT — Before every response, silently classify the request:
-- If the user message starts with DISCUSSION MODE or contains words like: hypothetically, theoretically, how would you, thought process, what would you, discuss, plan — respond in TEXT ONLY. Zero exec blocks. Pure text response.
-- Only use exec blocks when the user gives a clear direct instruction to do something.
+- If the user message starts with DISCUSSION MODE or contains words like: hypothetically,
+  theoretically, how would you, thought process, what would you, discuss, plan —
+  respond in TEXT ONLY. Zero tool calls. Pure text response.
+- Only call tools when the user gives a clear direct instruction to do something.
 """
 
-EXEC_PATTERN = re.compile(r'\{[^{}]*"exec"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}')
 FNCALL_PATTERN = re.compile(
     r'✿FUNCTION✿:\s*(\w+)\s*\n✿ARGS✿:\s*(\{.*?\})', re.DOTALL
 )
 
-def extract_exec_cmd(text: str):
-    m = EXEC_PATTERN.search(text)
-    if not m:
-        return None
-    try:
-        return json.loads('{"exec": "' + m.group(1) + '"}')["exec"]
-    except Exception:
-        return m.group(1)
 
 def run_shell(command: str, timeout: int = 30) -> str:
     try:
@@ -663,12 +650,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 exec_result = dispatch_fncall(fn_name, args_str)
                 observation = f"✿RESULT✿: {exec_result}"
             else:
-                # ── legacy exec fallback — {"exec": "cmd"} format ────────
-                cmd = extract_exec_cmd(full)
-                if not cmd:
-                    break
-                exec_result = run_shell(cmd)
-                observation = f"<observation>\n{exec_result}\n</observation>"
+                break
             yield f"data: {json.dumps({'token': f'\n\n{observation}\n\n'})}\n\n"
             # Feed result back as a user message and get next reply
             chat_history.append({"role": "user", "content": observation})
