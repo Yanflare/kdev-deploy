@@ -4,7 +4,7 @@
 - **Active entry point**: `kdev.py` (monolith, ~945 lines) — has streaming, skills, thinking model support
 - Package entry (secondary): `kdev/main.py` → `run_agent_loop()` in `kdev/agent.py` — no streaming/skills
 - Active backend: AWS Bedrock via bearer token (`AWS_BEARER_TOKEN_BEDROCK`) on Windows; Ollama (`huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M`) on Linux
-- MCP tools come from nautilus exe at `~/.rovodev/.local/share/acli/1.3.13-stable/...` (Windows only — .exe binary)
+- MCP tools come from nautilus exe at `~/.rovodev/.local/share/acli/1.3.13-stable/...` (Windows only — .exe binary). On Linux, the absence of these tools will result in degraded functionality but the system will handle it gracefully without crashing.
 - Sessions saved to `~/.kdev/sessions/<uuid>/context.json`
 - User-level memory at `~/.kdev/agent.md`; workspace memory here (`.agent.md`)
 - Debug mode: set `KDEV_DEBUG=1` in `.env`
