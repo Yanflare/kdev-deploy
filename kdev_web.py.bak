@@ -1,0 +1,316 @@
+"""
+kdev_web.py — KDEV web UI with login protection, direct Ollama streaming.
+Phase 1: Simple and reliable. MCP tools added in Phase 2.
+"""
+import hashlib, json, re, subprocess, sys
+from pathlib import Path
+import httpx
+from fastapi import Cookie, FastAPI, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
+
+app = FastAPI()
+KDEV_DIR     = Path(__file__).parent
+ENV_FILE     = KDEV_DIR / ".env"
+COOKIE_NAME  = "kdev_session"
+COOKIE_TTL   = 86400
+chat_history = []
+valid_sessions: set = set()
+MAX_EXEC_HOPS = 3
+
+SYSTEM_PROMPT = """You are kdev — a coding and systems assistant running on a Linux host.
+
+You can run shell commands by including a JSON exec block anywhere in your response:
+
+    {"exec": "command here"}
+
+Rules:
+- Use exec blocks to gather information, verify state, run scripts, etc.
+- One exec block per response turn.
+- The result will be fed back to you automatically so you can continue your answer.
+- Keep commands safe and non-destructive unless the user explicitly asks otherwise.
+- After seeing exec output, continue your response naturally.
+"""
+
+EXEC_PATTERN = re.compile(r'\{[^{}]*"exec"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}')
+
+def extract_exec_cmd(text: str):
+    m = EXEC_PATTERN.search(text)
+    if not m:
+        return None
+    try:
+        return json.loads('{"exec": "' + m.group(1) + '"}')["exec"]
+    except Exception:
+        return m.group(1)
+
+def run_shell(command: str, timeout: int = 30) -> str:
+    try:
+        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
+        parts = [f"[exec] $ {command}", f"[returncode] {r.returncode}"]
+        if r.stdout.strip():
+            parts.append(f"[stdout]\n{r.stdout.strip()}")
+        if r.stderr.strip():
+            parts.append(f"[stderr]\n{r.stderr.strip()}")
+        return "\n".join(parts)
+    except subprocess.TimeoutExpired:
+        return f"[exec] $ {command}\n[error] timed out after {timeout}s"
+    except Exception as e:
+        return f"[exec] $ {command}\n[error] {e}"
+
+async def ollama_complete(messages: list, model: str) -> str:
+    """Non-streaming Ollama call, returns full reply text."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            "http://localhost:11434/api/chat",
+            json={"model": model, "messages": messages, "stream": False}
+        )
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+
+def get_config():
+    cfg = {}
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+    return cfg
+
+def get_model():
+    return get_config().get("OLLAMA_MODEL", "huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M")
+
+def get_password_hash():
+    pwd = get_config().get("KDEV_WEB_PASSWORD", "kdev")
+    return hashlib.sha256(pwd.encode()).hexdigest()
+
+def make_token():
+    import secrets
+    return secrets.token_hex(32)
+
+def check_auth(session):
+    return session in valid_sessions
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>KDEV Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a1a;color:#00ffcc;font-family:'Courier New',monospace;height:100vh;display:flex;align-items:center;justify-content:center}
+.box{border:1px solid #00ffcc44;padding:40px;border-radius:12px;background:#001a11;min-width:320px;text-align:center}
+h1{font-size:1.8em;letter-spacing:4px;margin-bottom:8px}
+p{color:#006655;font-size:.8em;margin-bottom:30px}
+input{width:100%;background:#0a2a1a;border:1px solid #00ffcc44;color:#00ffcc;padding:12px;border-radius:8px;font-family:inherit;font-size:1em;outline:none;margin-bottom:16px;text-align:center;letter-spacing:2px}
+input:focus{border-color:#00ffcc99}
+button{width:100%;background:#006644;color:#00ffcc;border:1px solid #00ffcc44;padding:12px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:1em}
+button:hover{background:#008855}
+.error{color:#ff6666;font-size:.85em;margin-top:12px}
+</style></head><body>
+<div class="box">
+<h1>&#9646; KDEV</h1><p>AI coding assistant</p>
+<form method="POST" action="/login">
+<input type="password" name="password" placeholder="Enter password" autofocus>
+<button type="submit">Enter</button>
+</form>{error}</div></body></html>"""
+
+CHAT_HTML = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>KDEV</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a1a;color:#00ffcc;font-family:'Courier New',monospace;height:100vh;display:flex;flex-direction:column}
+#header{padding:16px 20px;border-bottom:1px solid #00ffcc33;display:flex;justify-content:space-between;align-items:center}
+#header h1{font-size:1.4em;letter-spacing:3px}
+#header p{color:#006655;font-size:.8em}
+#chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.bubble{max-width:85%;padding:10px 16px;border-radius:12px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+.user{align-self:flex-end;background:#00ffcc22;border:1px solid #00ffcc55;color:#00ffcc}
+.assistant{align-self:flex-start;background:#003322;border:1px solid #00664433;color:#aaffcc;min-width:60px;min-height:24px}
+#input-area{padding:16px;border-top:1px solid #00ffcc33;display:flex;gap:10px}
+#msg{flex:1;background:#001a11;border:1px solid #00ffcc44;color:#00ffcc;padding:10px 14px;border-radius:8px;font-family:inherit;font-size:1em;resize:none;outline:none}
+#msg:focus{border-color:#00ffcc99}
+button{background:#006644;color:#00ffcc;border:1px solid #00ffcc44;padding:10px 20px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.9em}
+button:hover{background:#008855}
+button:disabled{opacity:.4;cursor:not-allowed}
+#clear-btn{background:#1a0a0a;border-color:#ff444433;color:#ff6666}
+</style></head><body>
+<div id="header">
+<div><h1>&#9646; KDEV</h1><p>AI coding assistant &mdash; web interface</p></div>
+<form method="POST" action="/logout" style="margin:0">
+<button style="background:none;border:1px solid #ff444433;color:#ff6666;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8em" type="submit">Logout</button>
+</form></div>
+<div id="chat"></div>
+<div id="input-area">
+<textarea id="msg" rows="1" placeholder="Ask anything..."></textarea>
+<button id="send-btn" onclick="sendMsg()">Send</button>
+<button id="clear-btn" onclick="clearChat()">Clear</button>
+</div>
+<script>
+const chat=document.getElementById('chat');
+const msgEl=document.getElementById('msg');
+const sendBtn=document.getElementById('send-btn');
+msgEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
+function addBubble(text,cls){
+  const b=document.createElement('div');
+  b.className='bubble '+cls;
+  b.textContent=text;
+  chat.appendChild(b);
+  chat.scrollTop=chat.scrollHeight;
+  return b;
+}
+async function sendMsg(){
+  const text=msgEl.value.trim();
+  if(!text)return;
+  msgEl.value='';
+  sendBtn.disabled=true;
+  addBubble(text,'user');
+  const bubble=addBubble('','assistant');
+  try{
+    const resp=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+    const reader=resp.body.getReader();
+    const decoder=new TextDecoder();
+    let buf='',done=false;
+    while(!done){
+      const{done:d,value}=await reader.read();
+      if(d)break;
+      buf+=decoder.decode(value,{stream:true});
+      const lines=buf.split(String.fromCharCode(10));
+      buf=lines.pop();
+      for(const line of lines){
+        if(line.startsWith('data: ')){
+          const data=line.slice(6).trim();
+          if(data==='[DONE]'){done=true;break;}
+          try{
+            const obj=JSON.parse(data);
+            if(typeof obj.token==='string'){bubble.textContent+=obj.token;chat.scrollTop=chat.scrollHeight;}
+          }catch(e){}
+        }
+      }
+    }
+    reader.cancel();
+  }catch(e){bubble.textContent='Error: '+e.message;}
+  sendBtn.disabled=false;
+  msgEl.focus();
+}
+async function clearChat(){
+  await fetch('/clear',{method:'POST'});
+  chat.innerHTML='';
+}
+</script></body></html>"""
+
+@app.get("/", response_class=HTMLResponse)
+async def index(kdev_session: str | None = Cookie(default=None)):
+    h = {"Cache-Control": "no-store"}
+    if not check_auth(kdev_session):
+        return HTMLResponse(LOGIN_HTML.replace("{error}", ""), headers=h)
+    return HTMLResponse(CHAT_HTML, headers=h)
+
+@app.post("/login")
+async def login(request: Request):
+    form = await request.form()
+    if hashlib.sha256(form.get("password", "").encode()).hexdigest() == get_password_hash():
+        token = make_token()
+        valid_sessions.add(token)
+        resp = Response(status_code=302, headers={"Location": "/"})
+        resp.set_cookie(COOKIE_NAME, token, max_age=COOKIE_TTL, httponly=True)
+        return resp
+    return HTMLResponse(
+        LOGIN_HTML.replace("{error}", '<p class="error">Wrong password</p>'),
+        headers={"Cache-Control": "no-store"}
+    )
+
+@app.post("/logout")
+async def logout(kdev_session: str | None = Cookie(default=None)):
+    valid_sessions.discard(kdev_session)
+    resp = Response(status_code=302, headers={"Location": "/"})
+    resp.delete_cookie(COOKIE_NAME)
+    return resp
+
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+
+    global chat_history
+    chat_history.append({"role": "user", "content": req.message})
+    model = get_model()
+
+    # Messages sent to Ollama: system prompt prepended, but NOT stored in chat_history
+    def build_messages():
+        return [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
+
+    async def stream():
+        global chat_history
+        full = ""
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    "http://localhost:11434/api/chat",
+                    json={"model": model, "messages": build_messages(), "stream": True}
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                            token = obj.get("message", {}).get("content", "")
+                            if token:
+                                full += token
+                                yield f"data: {json.dumps({'token': token})}\n\n"
+                            if obj.get("done"):
+                                break
+                        except Exception:
+                            continue
+        except Exception as e:
+            yield f"data: {json.dumps({'token': f'Error: {e}'})}\n\n"
+            chat_history.append({"role": "assistant", "content": full})
+            yield "data: [DONE]\n\n"
+            return
+
+        chat_history.append({"role": "assistant", "content": full})
+
+        # ── Exec loop (max MAX_EXEC_HOPS hops) ───────────────────────────────
+        for hop in range(MAX_EXEC_HOPS):
+            cmd = extract_exec_cmd(full)
+            if not cmd:
+                break
+            exec_result = run_shell(cmd)
+            yield f"data: {json.dumps({'token': f'\n\n{exec_result}\n\n'})}\n\n"
+            # Feed result back as a user message and get next reply
+            chat_history.append({"role": "user", "content": exec_result})
+            try:
+                full = await ollama_complete(build_messages(), model)
+            except Exception as e:
+                full = f"Error during exec follow-up: {e}"
+            chat_history.append({"role": "assistant", "content": full})
+            # Stream the follow-up reply token by token (send as one chunk)
+            yield f"data: {json.dumps({'token': full})}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+@app.post("/clear")
+async def clear(kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+    global chat_history
+    chat_history = []
+    return {"ok": True}
+
+class ExecRequest(BaseModel):
+    command: str
+    timeout: int = 30
+
+@app.post("/exec")
+async def exec_endpoint(req: ExecRequest, kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+    output = run_shell(req.command, timeout=req.timeout)
+    return JSONResponse({"output": output})
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)

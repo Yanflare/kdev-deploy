@@ -1,0 +1,683 @@
+"""
+kdev_web.py — KDEV web UI with login protection, direct Ollama streaming.
+Phase 1: Simple and reliable. MCP tools added in Phase 2.
+"""
+import asyncio
+import hashlib, json, re, subprocess, sys
+from pathlib import Path
+import httpx
+from fastapi import Cookie, FastAPI, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
+
+# ── Skills bridge ─────────────────────────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).parent))
+try:
+    from skills import load_relevant_skills, SKILLS_DIR
+    SKILLS_AVAILABLE = True
+except ImportError:
+    SKILLS_AVAILABLE = False
+    def load_relevant_skills(task, max_skills=3): return ""
+
+# ── Memory bridge ──────────────────────────────────────────────────────────────
+try:
+    from kdev_memory import (
+        ingest_memory, query_memory, run_consolidation, consolidation_loop,
+        get_memory_stats
+    )
+    MEMORY_AVAILABLE = True
+except ImportError:
+    MEMORY_AVAILABLE = False
+    def query_memory(msg, max_memories=5): return ""
+    async def ingest_memory(u, a): pass
+    async def run_consolidation(): pass
+    async def consolidation_loop(): pass
+
+app = FastAPI()
+KDEV_DIR     = Path(__file__).parent
+ENV_FILE     = KDEV_DIR / ".env"
+COOKIE_NAME  = "kdev_session"
+COOKIE_TTL   = 86400
+chat_history = []
+valid_sessions: set = set()
+MAX_EXEC_HOPS = 3
+
+
+import ast as _ast
+import hashlib as _hashlib
+
+def build_repomap(project_path: str, max_files: int = 80) -> str:
+    """Walk project_path, extract Python defs via ast, cache result."""
+    import os, time
+    from pathlib import Path
+
+    cache_dir = Path.home() / ".kdev"
+    cache_dir.mkdir(exist_ok=True)
+    slug = _hashlib.md5(project_path.encode()).hexdigest()[:8]
+    cache_file = cache_dir / f"repomap-{slug}.md"
+
+    # Collect py files + max mtime
+    py_files = []
+    for root, dirs, files in os.walk(project_path):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+        for f in files:
+            if f.endswith(".py"):
+                py_files.append(os.path.join(root, f))
+        if len(py_files) >= max_files:
+            break
+    py_files = py_files[:max_files]
+
+    if not py_files:
+        return ""
+
+    newest_mtime = max(os.path.getmtime(f) for f in py_files)
+
+    # Cache hit?
+    if cache_file.exists():
+        meta_line = cache_file.read_text().splitlines()[0]
+        try:
+            cached_mtime = float(meta_line.split("mtime=")[1])
+            if cached_mtime >= newest_mtime:
+                lines = cache_file.read_text().splitlines()[1:]
+                return "\n".join(lines)
+        except Exception:
+            pass
+
+    # Build map
+    rel = lambda p: os.path.relpath(p, project_path)
+    lines = []
+    for fpath in sorted(py_files):
+        try:
+            source = open(fpath, encoding="utf-8", errors="ignore").read()
+            tree = _ast.parse(source, filename=fpath)
+        except Exception:
+            continue
+        symbols = []
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                prefix = "  def " if not isinstance(node, _ast.AsyncFunctionDef) else "  async def "
+                symbols.append(f"{prefix}{node.name}()")
+            elif isinstance(node, _ast.ClassDef):
+                symbols.append(f"  class {node.name}")
+        if symbols:
+            lines.append(f"{rel(fpath)}:")
+            lines.extend(symbols)
+        else:
+            lines.append(f"{rel(fpath)}")
+
+    result = "\n".join(lines)
+
+    # Write cache (first line = mtime metadata)
+    cache_file.write_text(f"mtime={newest_mtime}\n" + result)
+    print(f"[repomap] cached {len(py_files)} files → {cache_file}", flush=True)
+    return result
+
+SYSTEM_PROMPT = """You are kdev — a coding and systems assistant running on a Linux host.
+
+You can run shell commands by including a JSON exec block anywhere in your response:
+
+    {"exec": "command here"}
+
+Rules:
+- Use exec blocks to gather information, verify state, run scripts, etc.
+- One exec block per response turn.
+- The result will be fed back to you automatically so you can continue your answer.
+- Keep commands safe and non-destructive unless the user explicitly asks otherwise.
+- After seeing exec output, continue your response naturally.
+- Exec results are returned as <observation> blocks containing <returncode> and <output>.
+- If <returncode> is non-zero, something went wrong — diagnose from <output> and retry with a corrected command.
+- If <returncode> is 0, the command succeeded — reason from <output> and continue.
+- Never repeat a command that already returned a non-zero code without changing it.
+
+IMPORTANT — Before every response, silently classify the request:
+- If the user message starts with DISCUSSION MODE or contains words like: hypothetically, theoretically, how would you, thought process, what would you, discuss, plan — respond in TEXT ONLY. Zero exec blocks. Pure text response.
+- Only use exec blocks when the user gives a clear direct instruction to do something.
+"""
+
+EXEC_PATTERN = re.compile(r'\{[^{}]*"exec"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}')
+
+def extract_exec_cmd(text: str):
+    m = EXEC_PATTERN.search(text)
+    if not m:
+        return None
+    try:
+        return json.loads('{"exec": "' + m.group(1) + '"}')["exec"]
+    except Exception:
+        return m.group(1)
+
+def run_shell(command: str, timeout: int = 30) -> str:
+    try:
+        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
+        combined = ""
+        if r.stdout.strip():
+            combined += r.stdout.strip()
+        if r.stderr.strip():
+            combined += ("\n" if combined else "") + r.stderr.strip()
+        if not combined:
+            combined = "(no output)"
+        output_block = combined if len(combined) <= 8000 else (
+            combined[:4000] + f"\n\n[... {len(combined)-8000} chars elided ...]\n\n" + combined[-4000:]
+        )
+        return f"<returncode>{r.returncode}</returncode>\n<output>\n{output_block}\n</output>"
+    except subprocess.TimeoutExpired:
+        return f"<returncode>timeout</returncode>\n<output>\ntimed out after {timeout}s\n</output>"
+    except Exception as e:
+        return f"<returncode>error</returncode>\n<output>\n{e}\n</output>"
+
+async def ollama_complete(messages: list, model: str) -> str:
+    """Non-streaming Ollama call, returns full reply text."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            "http://localhost:11434/api/chat",
+            json={"model": model, "messages": messages, "stream": False}
+        )
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+
+def get_config():
+    cfg = {}
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+    return cfg
+
+def get_model():
+    return get_config().get("OLLAMA_MODEL", "huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M")
+
+def get_password_hash():
+    pwd = get_config().get("KDEV_WEB_PASSWORD", "kdev")
+    return hashlib.sha256(pwd.encode()).hexdigest()
+
+def make_token():
+    import secrets
+    return secrets.token_hex(32)
+
+def check_auth(session):
+    return session in valid_sessions
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>KDEV Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a1a;color:#00ffcc;font-family:'Courier New',monospace;height:100vh;display:flex;align-items:center;justify-content:center}
+.box{border:1px solid #00ffcc44;padding:40px;border-radius:12px;background:#001a11;min-width:320px;text-align:center}
+h1{font-size:1.8em;letter-spacing:4px;margin-bottom:8px}
+p{color:#006655;font-size:.8em;margin-bottom:30px}
+input{width:100%;background:#0a2a1a;border:1px solid #00ffcc44;color:#00ffcc;padding:12px;border-radius:8px;font-family:inherit;font-size:1em;outline:none;margin-bottom:16px;text-align:center;letter-spacing:2px}
+input:focus{border-color:#00ffcc99}
+button{width:100%;background:#006644;color:#00ffcc;border:1px solid #00ffcc44;padding:12px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:1em}
+button:hover{background:#008855}
+.error{color:#ff6666;font-size:.85em;margin-top:12px}
+</style></head><body>
+<div class="box">
+<h1>&#9646; KDEV</h1><p>AI coding assistant</p>
+<form method="POST" action="/login">
+<input type="password" name="password" placeholder="Enter password" autofocus>
+<button type="submit">Enter</button>
+</form>{error}</div></body></html>"""
+
+CHAT_HTML = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>KDEV</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a1a;color:#00ffcc;font-family:'Courier New',monospace;height:100vh;display:flex;flex-direction:column}
+#header{padding:16px 20px;border-bottom:1px solid #00ffcc33;display:flex;justify-content:space-between;align-items:center}
+#header h1{font-size:1.4em;letter-spacing:3px}
+#header p{color:#006655;font-size:.8em}
+#chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;min-height:0}
+.bubble{max-width:85%;padding:10px 16px;border-radius:12px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+.user{align-self:flex-end;background:#00ffcc22;border:1px solid #00ffcc55;color:#00ffcc}
+.assistant{align-self:flex-start;background:#003322;border:1px solid #00664433;color:#aaffcc;min-width:60px;min-height:24px;max-height:400px;overflow-y:auto}
+#input-area{padding:16px;border-top:1px solid #00ffcc33;display:flex;gap:10px}
+#msg{flex:1;background:#001a11;border:1px solid #00ffcc44;color:#00ffcc;padding:10px 14px;border-radius:8px;font-family:inherit;font-size:1em;resize:none;outline:none}
+#msg:focus{border-color:#00ffcc99}
+button{background:#006644;color:#00ffcc;border:1px solid #00ffcc44;padding:10px 20px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.9em}
+button:hover{background:#008855}
+button:disabled{opacity:.4;cursor:not-allowed}
+#compress-btn{background:#0a1a2a;border-color:#4488ff33;color:#88bbff}
+#clear-btn{background:#1a0a0a;border-color:#ff444433;color:#ff6666}
+</style></head><body>
+<div id="header">
+<div><h1>&#9646; KDEV</h1><p>AI coding assistant &mdash; web interface</p></div>
+<form method="POST" action="/logout" style="margin:0">
+<button style="background:none;border:1px solid #ff444433;color:#ff6666;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8em" type="submit">Logout</button>
+</form></div>
+<div id="chat"></div>
+<div id="input-area">
+<textarea id="msg" rows="1" placeholder="Ask anything..."></textarea>
+<button id="send-btn" onclick="sendMsg()">Send</button>
+<button id="compress-btn" onclick="compressSession()">Compress</button>
+<button id="clear-btn" onclick="clearChat()">Clear</button>
+</div>
+<script>
+const chat=document.getElementById('chat');
+const msgEl=document.getElementById('msg');
+const sendBtn=document.getElementById('send-btn');
+msgEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
+function addBubble(text,cls){
+  const b=document.createElement('div');
+  b.className='bubble '+cls;
+  b.textContent=text;
+  chat.appendChild(b);
+  chat.scrollTop=chat.scrollHeight;
+  return b;
+}
+async function sendMsg(){
+  const text=msgEl.value.trim();
+  if(!text)return;
+  msgEl.value='';
+  sendBtn.disabled=true;
+  addBubble(text,'user');
+  const bubble=addBubble('','assistant');
+  try{
+    const resp=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+    const reader=resp.body.getReader();
+    const decoder=new TextDecoder();
+    let buf='',done=false;
+    while(!done){
+      const{done:d,value}=await reader.read();
+      if(d)break;
+      buf+=decoder.decode(value,{stream:true});
+      const lines=buf.split(String.fromCharCode(10));
+      buf=lines.pop();
+      for(const line of lines){
+        if(line.startsWith('data: ')){
+          const data=line.slice(6).trim();
+          if(data==='[DONE]'){done=true;break;}
+          try{
+            const obj=JSON.parse(data);
+            if(typeof obj.token==='string'){bubble.textContent+=obj.token;chat.scrollTop=chat.scrollHeight;}
+          }catch(e){}
+        }
+      }
+    }
+    reader.cancel();
+  }catch(e){bubble.textContent='Error: '+e.message;}
+  sendBtn.disabled=false;
+  msgEl.focus();
+}
+async function clearChat(){
+  await fetch('/clear',{method:'POST'});
+  chat.innerHTML='';
+}
+async function compressSession(){
+  const btn=document.getElementById('compress-btn');
+  btn.disabled=true;
+  btn.textContent='Compressing...';
+  const bubble=addBubble('','assistant');
+  try{
+    const resp=await fetch('/compress',{method:'POST'});
+    const data=await resp.json();
+    bubble.textContent=data.summary||'Compression failed.';
+  }catch(e){
+    bubble.textContent='Error: '+e.message;
+  }
+  btn.disabled=false;
+  btn.textContent='Compress';
+  chat.scrollTop=chat.scrollHeight;
+}
+</script></body></html>"""
+
+
+# ── Web skill saver (Ollama-native, no pydantic-ai) ──────────────────────────
+async def web_save_skill(user_task: str, full_response: str) -> None:
+    """
+    After a complex web UI task, distill it into a skill doc via Ollama.
+    Saves to ~/.kdev/skills/ — same pool as terminal REPL.
+    Runs as a background task, never blocks the response stream.
+    """
+    import re as _re
+    from datetime import datetime
+
+    model = get_model()
+    prompt = f"""You are documenting a reusable skill for a coding agent.
+
+A user asked: "{user_task[:200]}"
+
+The agent's full response was:
+{full_response[:1500]}
+
+Write a concise SKILL.md document capturing:
+1. When to apply this skill (trigger conditions)
+2. The optimal approach / mental model
+3. Key commands or tools and their order
+4. Pitfalls to avoid
+
+Format EXACTLY as:
+---
+title: <skill name, max 8 words>
+tags: <3-5 keywords, comma separated>
+complexity: <simple|medium|complex>
+summary: <one line>
+---
+
+## When to use
+...
+
+## Approach
+...
+
+## Tool strategy
+...
+
+## Pitfalls
+...
+
+Be terse. This will be injected into a system prompt."""
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "http://localhost:11434/api/chat",
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "You write precise minimal technical documentation. No padding."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "stream": False
+                }
+            )
+            resp.raise_for_status()
+            skill_text = resp.json()["message"]["content"]
+
+        if not skill_text or len(skill_text) < 50:
+            return
+
+        slug = _re.sub(r"[^a-z0-9]+", "-", user_task[:50].lower()).strip("-")
+        # Overwrite if a skill with same slug already exists (no duplicates)
+        existing = list(SKILLS_DIR.glob(f"*-{slug}.md"))
+        if existing:
+            skill_path = existing[0]
+        else:
+            ts = datetime.now().strftime("%Y%m%d-%H%M")
+            skill_path = SKILLS_DIR / f"{ts}-{slug}.md"
+        skill_path.write_text(skill_text, encoding="utf-8")
+    except Exception:
+        pass  # Never crash the web server over skill saving
+
+
+# ── Web session compressor (/compress command) ────────────────────────────────
+async def web_compress_session(history: list) -> str:
+    """
+    Distill the current chat_history into a compressed snapshot via Ollama.
+    Saves to ~/.kdev/compressed/. Returns the summary text to display in UI.
+    """
+    import re as _re
+    from datetime import datetime
+    from pathlib import Path
+
+    if not history:
+        return "Nothing to compress — chat history is empty."
+
+    # Build transcript from plain dicts
+    lines = []
+    for msg in history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")[:400]
+        if role == "user":
+            lines.append(f"USER: {content}")
+        elif role == "assistant":
+            lines.append(f"ASSISTANT: {content}")
+
+    transcript = "\n\n".join(lines)
+    if len(transcript) > 6000:
+        transcript = transcript[:3000] + "\n\n[...middle trimmed...]\n\n" + transcript[-3000:]
+
+    prompt = f"""Apply knowledge distillation to compress this coding session.
+
+TRANSCRIPT:
+{transcript}
+
+Produce a compressed session document with these exact sections:
+
+## Session Summary
+2-3 sentences. What was accomplished?
+
+## Key Decisions
+Bullet list. Important technical choices made.
+
+## What Worked
+Bullet list. Approaches and patterns that were effective.
+
+## What to Remember
+Bullet list. Facts to remember in future sessions.
+
+## Memory Update
+Max 5 sentences. Permanent reference notes for .agent.md.
+
+## Skills Crystallised
+Reusable skills discovered this session. Format: `skill_name: description`
+
+Be ruthlessly concise. Every word must earn its place."""
+
+    model = get_model()
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                "http://localhost:11434/api/chat",
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "You are a technical knowledge distillation system. Extract maximum signal, discard all noise."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "stream": False
+                }
+            )
+            resp.raise_for_status()
+            result = resp.json()["message"]["content"]
+    except Exception as e:
+        return f"Compression failed: {e}"
+
+    if not result or len(result) < 50:
+        return "Compression failed — model returned empty response."
+
+    # Save snapshot
+    from pathlib import Path as _Path
+    snap_dir = _Path.home() / ".kdev" / "compressed"
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M")
+    snap_path = snap_dir / f"{ts}-web-session.md"
+    snap_path.write_text(
+        f"# Compressed Session — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        f"Source: web UI\n\n" + result,
+        encoding="utf-8"
+    )
+
+    return result + f"\n\n---\n*Snapshot saved to: {snap_path}*"
+
+@app.get("/", response_class=HTMLResponse)
+async def index(kdev_session: str | None = Cookie(default=None)):
+    h = {"Cache-Control": "no-store"}
+    if not check_auth(kdev_session):
+        return HTMLResponse(LOGIN_HTML.replace("{error}", ""), headers=h)
+    return HTMLResponse(CHAT_HTML, headers=h)
+
+@app.post("/login")
+async def login(request: Request):
+    form = await request.form()
+    if hashlib.sha256(form.get("password", "").encode()).hexdigest() == get_password_hash():
+        token = make_token()
+        valid_sessions.add(token)
+        resp = Response(status_code=302, headers={"Location": "/"})
+        resp.set_cookie(COOKIE_NAME, token, max_age=COOKIE_TTL, httponly=True)
+        return resp
+    return HTMLResponse(
+        LOGIN_HTML.replace("{error}", '<p class="error">Wrong password</p>'),
+        headers={"Cache-Control": "no-store"}
+    )
+
+@app.post("/logout")
+async def logout(kdev_session: str | None = Cookie(default=None)):
+    valid_sessions.discard(kdev_session)
+    resp = Response(status_code=302, headers={"Location": "/"})
+    resp.delete_cookie(COOKIE_NAME)
+    return resp
+
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+
+    global chat_history
+    # /map shortcut: build and return repomap directly, skip LLM
+    if req.message.strip().startswith("/map"):
+        parts = req.message.strip().split(None, 1)
+        map_path = parts[1].strip() if len(parts) > 1 else "/home/yanflare/kdev-deploy"
+        repomap = build_repomap(map_path)
+        if repomap:
+            response_text = f"## Repo map: {map_path}\n\n```\n{repomap}\n```"
+        else:
+            response_text = f"No Python files found in {map_path}"
+        chat_history.append({"role": "user", "content": req.message})
+        chat_history.append({"role": "assistant", "content": response_text})
+        async def map_stream():
+            import json
+            yield f"data: {json.dumps({'token': response_text})}\n\n"
+            yield "data: [DONE]\n\n"
+        from starlette.responses import StreamingResponse as _SR
+        return _SR(map_stream(), media_type="text/event-stream")
+    chat_history.append({"role": "user", "content": req.message})
+    model = get_model()
+
+    # Messages sent to Ollama: system prompt prepended, but NOT stored in chat_history
+    def build_messages():
+        system = SYSTEM_PROMPT
+        if SKILLS_AVAILABLE:
+            injected = load_relevant_skills(req.message, max_skills=3)
+            if injected:
+                system = SYSTEM_PROMPT.rstrip() + "\n\n" + injected
+        if MEMORY_AVAILABLE:
+            mem_context = query_memory(req.message, max_memories=5)
+            if mem_context:
+                system = system.rstrip() + "\n\n" + mem_context
+        # /map trigger: inject repomap into system prompt
+        if req.message.strip().startswith("/map"):
+            parts = req.message.strip().split(None, 1)
+            map_path = parts[1].strip() if len(parts) > 1 else "/home/yanflare/kdev-deploy"
+            repomap = build_repomap(map_path)
+            if repomap:
+                map_block = f"## Repo map: {map_path}\n\n```\n{repomap}\n```"
+                system = system.rstrip() + "\n\n" + map_block
+        return [{"role": "system", "content": system}] + chat_history
+
+    async def stream():
+        global chat_history
+        full = ""
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    "http://localhost:11434/api/chat",
+                    json={"model": model, "messages": build_messages(), "stream": True}
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                            token = obj.get("message", {}).get("content", "")
+                            if token:
+                                full += token
+                                yield f"data: {json.dumps({'token': token})}\n\n"
+                            if obj.get("done"):
+                                break
+                        except Exception:
+                            continue
+        except Exception as e:
+            yield f"data: {json.dumps({'token': f'Error: {e}'})}\n\n"
+            chat_history.append({"role": "assistant", "content": full})
+            yield "data: [DONE]\n\n"
+            return
+
+        chat_history.append({"role": "assistant", "content": full})
+
+        # ── Exec loop (max MAX_EXEC_HOPS hops) ───────────────────────────────
+        for hop in range(MAX_EXEC_HOPS):
+            cmd = extract_exec_cmd(full)
+            if not cmd:
+                break
+            exec_result = run_shell(cmd)
+            observation = f"<observation>\n{exec_result}\n</observation>"
+            yield f"data: {json.dumps({'token': f'\n\n{observation}\n\n'})}\n\n"
+            # Feed result back as a user message and get next reply
+            chat_history.append({"role": "user", "content": observation})
+            try:
+                full = await ollama_complete(build_messages(), model)
+            except Exception as e:
+                full = f"Error during exec follow-up: {e}"
+            chat_history.append({"role": "assistant", "content": full})
+            # Stream the follow-up reply token by token (send as one chunk)
+            yield f"data: {json.dumps({'token': full})}\n\n"
+
+        # ── Skill save (background, non-blocking) ────────────────────────────
+        if SKILLS_AVAILABLE:
+            ran_exec = hop > 0
+            is_complex = ran_exec or len(full) > 600
+            if is_complex:
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(web_save_skill(req.message, full))
+                except Exception as e:
+                    print(f"[skill-save] create_task failed: {e}", flush=True)
+
+        if MEMORY_AVAILABLE:
+            try:
+                loop = asyncio.get_event_loop()
+                loop.create_task(ingest_memory(req.message, full))
+            except Exception as e:
+                print(f"[memory] ingest create_task failed: {e}", flush=True)
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@app.post("/compress")
+async def compress_endpoint(kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+    result = await web_compress_session(chat_history)
+    if MEMORY_AVAILABLE:
+        try:
+            await run_consolidation()
+        except Exception as e:
+            print(f"[memory] compress consolidation failed: {e}", flush=True)
+    return JSONResponse({"summary": result})
+
+@app.post("/clear")
+async def clear(kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+    global chat_history
+    chat_history = []
+    return {"ok": True}
+
+class ExecRequest(BaseModel):
+    command: str
+    timeout: int = 30
+
+@app.post("/exec")
+async def exec_endpoint(req: ExecRequest, kdev_session: str | None = Cookie(default=None)):
+    if not check_auth(kdev_session):
+        return Response("Unauthorized", status_code=401)
+    output = run_shell(req.command, timeout=req.timeout)
+    return JSONResponse({"output": output})
+
+
+@app.on_event("startup")
+async def startup_event():
+    if MEMORY_AVAILABLE:
+        loop = asyncio.get_event_loop()
+        loop.create_task(consolidation_loop())
+        print("[memory] consolidation loop started", flush=True)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
