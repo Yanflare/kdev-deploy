@@ -4,6 +4,7 @@ Phase 1: Simple and reliable. MCP tools added in Phase 2.
 """
 import asyncio
 import hashlib, json, re, subprocess, sys
+import requests
 from pathlib import Path
 import httpx
 from fastapi import Cookie, FastAPI, Request, Response
@@ -520,6 +521,31 @@ async def logout(kdev_session: str | None = Cookie(default=None)):
 class ChatRequest(BaseModel):
     message: str
 
+SEARXNG_URL = "http://localhost:4000/search"
+
+def web_search(query: str, num_results: int = 5) -> str:
+    """Hit local SearXNG instance and return formatted results string."""
+    try:
+        resp = requests.get(
+            SEARXNG_URL,
+            params={"q": query, "format": "json", "categories": "general"},
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results", [])[:num_results]
+        if not results:
+            return "[WEB SEARCH] No results returned."
+        lines = [f"[WEB SEARCH] Query: {query}\n"]
+        for i, r in enumerate(results, 1):
+            title   = r.get("title", "No title")
+            url     = r.get("url", "")
+            snippet = r.get("content", "No snippet")[:300]
+            lines.append(f"{i}. {title}\n   URL: {url}\n   {snippet}\n")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"[WEB SEARCH ERROR] {e}"
+
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(default=None)):
     if not check_auth(kdev_session):
@@ -543,7 +569,17 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             yield "data: [DONE]\n\n"
         from starlette.responses import StreamingResponse as _SR
         return _SR(map_stream(), media_type="text/event-stream")
-    chat_history.append({"role": "user", "content": req.message})
+    if req.message.strip().lower().startswith("/web-search"):
+        query = req.message.strip()[len("/web-search"):].strip()
+        if not query:
+            async def _empty():
+                yield "Usage: /web-search <your query>"
+            return StreamingResponse(_empty(), media_type="text/event-stream")
+        search_results = web_search(query)
+        augmented = search_results + "\n\nBased on the above web search results, answer: " + query
+        chat_history.append({"role": "user", "content": augmented})
+    else:
+        chat_history.append({"role": "user", "content": req.message})
     model = get_model()
 
     # Messages sent to Ollama: system prompt prepended, but NOT stored in chat_history
