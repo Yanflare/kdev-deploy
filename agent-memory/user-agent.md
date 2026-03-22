@@ -1,4 +1,3 @@
-## Current content of agent-memory/user-agent.md:
 # User Memory — kdev global context
 
 Injected into every kdev session across all workspaces.
@@ -13,6 +12,7 @@ Injected into every kdev session across all workspaces.
 - Always read code before editing — no guessing at structure
 - One task at a time — do not chain multiple actions unprompted
 - Avoid complex actions without explicit instructions
+- The `/memory` command currently opens files with an editor but does not specify which editor. Users can set their preferred editor via environment variables.
 
 ## Known Platform Issues (Linux)
 - /memory command: os.startfile() is Windows-only — avoid
