@@ -136,6 +136,9 @@ IMPORTANT — Before every response, silently classify the request:
 """
 
 EXEC_PATTERN = re.compile(r'\{[^{}]*"exec"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}')
+FNCALL_PATTERN = re.compile(
+    r'✿FUNCTION✿:\s*(\w+)\s*\n✿ARGS✿:\s*(\{.*?\})', re.DOTALL
+)
 
 def extract_exec_cmd(text: str):
     m = EXEC_PATTERN.search(text)
@@ -546,6 +549,22 @@ def web_search(query: str, num_results: int = 5) -> str:
     except Exception as e:
         return f"[WEB SEARCH ERROR] {e}"
 
+from kdev_tools import build_tools_system_prompt, TOOL_REGISTRY as KDEV_TOOL_REGISTRY
+TOOLS_SCHEMA = build_tools_system_prompt()
+SYSTEM_PROMPT = SYSTEM_PROMPT + TOOLS_SCHEMA
+
+
+def dispatch_fncall(fn_name: str, args_str: str) -> str:
+    """Dispatch a ✿FUNCTION✿ call to the KDEV tool registry."""
+    if fn_name not in KDEV_TOOL_REGISTRY:
+        return json.dumps({'returncode': -1, 'output': f'Unknown tool: {fn_name}. Available: {list(KDEV_TOOL_REGISTRY.keys())}'})
+    try:
+        result = KDEV_TOOL_REGISTRY[fn_name]().call(args_str)
+        return result
+    except Exception as e:
+        return json.dumps({'returncode': -1, 'output': f'Tool dispatch error: {e}'})
+
+
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(default=None)):
     if not check_auth(kdev_session):
@@ -636,11 +655,20 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
 
         # ── Exec loop (max MAX_EXEC_HOPS hops) ───────────────────────────────
         for hop in range(MAX_EXEC_HOPS):
-            cmd = extract_exec_cmd(full)
-            if not cmd:
-                break
-            exec_result = run_shell(cmd)
-            observation = f"<observation>\n{exec_result}\n</observation>"
+            # ── fncall parser (primary) — ✿FUNCTION✿ format ─────────────
+            fn_match = FNCALL_PATTERN.search(full)
+            if fn_match:
+                fn_name = fn_match.group(1)
+                args_str = fn_match.group(2)
+                exec_result = dispatch_fncall(fn_name, args_str)
+                observation = f"✿RESULT✿: {exec_result}"
+            else:
+                # ── legacy exec fallback — {"exec": "cmd"} format ────────
+                cmd = extract_exec_cmd(full)
+                if not cmd:
+                    break
+                exec_result = run_shell(cmd)
+                observation = f"<observation>\n{exec_result}\n</observation>"
             yield f"data: {json.dumps({'token': f'\n\n{observation}\n\n'})}\n\n"
             # Feed result back as a user message and get next reply
             chat_history.append({"role": "user", "content": observation})
