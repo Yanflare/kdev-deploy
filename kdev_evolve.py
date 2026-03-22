@@ -497,10 +497,8 @@ def main():
             continue
 
         # Commit
-        rc, out = git(
-            f"git add -A && git commit -m "
-            f"'evolve {session_dt}: Task {task_num} — {task[\"title\"]}'"
-        )
+        commit_msg = f"evolve {session_dt}: Task {task_num} - {task['title']}"
+        rc, out = git(f"git add -A && git commit -m '{commit_msg}'")
         if rc != 0:
             msg = f"Task {task_num} git commit failed: {out}"
             log(f"  {msg}")

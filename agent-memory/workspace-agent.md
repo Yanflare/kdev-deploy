@@ -24,8 +24,16 @@
   - `LINUX_BOOT_PROMPT.md` — full briefing for first Linux session (read this first on boot)
 - **Deployment package created**: `kdev-deploy/` folder — complete self-contained package for SCP to Linux
 
+## Recent Skills Learned and Immediate Tasks for First Boot Session on Linux
 
-## Discussion Mode Rules
-If the user uses words like: hypothetically, theoretically, how would you, thought process — switch to DISCUSSION MODE.
-In discussion mode: do NOT execute any commands, do NOT look for files, respond only in text.
-Stay in discussion mode until the user gives a real task.
+### Skills Learned:
+- Integration of Ollama backend: The model `huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M` is now available as the primary AI engine.
+- Handling environment variables for different OSes: `.env` files are used to configure settings specific to Linux (e.g., Ollama URL and model).
+
+### Immediate Tasks:
+1. **Update .env File**: Set `OLLAMA_BASE_URL` and `OLLAMA_MODEL=huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M` in the `.env` file for Linux.
+2. **Check Deployment Package**: Ensure all necessary files are included in the `kdev-deploy/` folder, especially `skills.py`.
+3. **Run Agent Loop**: Execute `python kdev/main.py` to start the agent loop on Linux.
+4. **Test Basic Commands**: Use `/hello`, `/memory`, and other basic commands to verify functionality.
+
+- These tasks will help in setting up a smooth initial session on Linux, ensuring that all components work correctly post-migration.
