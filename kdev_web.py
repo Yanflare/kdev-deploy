@@ -3,7 +3,7 @@ kdev_web.py — KDEV web UI with login protection, direct Ollama streaming.
 Phase 1: Simple and reliable. MCP tools added in Phase 2.
 """
 import asyncio
-import hashlib, json, re, subprocess, sys
+import hashlib, json, re, subprocess, sys, uuid
 import requests
 from pathlib import Path
 import httpx
@@ -541,12 +541,12 @@ TOOLS_SCHEMA = build_tools_system_prompt()
 SYSTEM_PROMPT = SYSTEM_PROMPT + TOOLS_SCHEMA
 
 
-def dispatch_fncall(fn_name: str, args_str: str) -> str:
+def dispatch_fncall(fn_name: str, args_str: str, session_id: str = 'default') -> str:
     """Dispatch a ✿FUNCTION✿ call to the KDEV tool registry."""
     if fn_name not in KDEV_TOOL_REGISTRY:
         return json.dumps({'returncode': -1, 'output': f'Unknown tool: {fn_name}. Available: {list(KDEV_TOOL_REGISTRY.keys())}'})
     try:
-        result = KDEV_TOOL_REGISTRY[fn_name]().call(args_str)
+        result = KDEV_TOOL_REGISTRY[fn_name]().call(args_str, session_id=session_id)
         return result
     except Exception as e:
         return json.dumps({'returncode': -1, 'output': f'Tool dispatch error: {e}'})
@@ -558,6 +558,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         return Response("Unauthorized", status_code=401)
 
     global chat_history
+    session_id = str(uuid.uuid4())  # unique per conversation
     # /map shortcut: build and return repomap directly, skip LLM
     if req.message.strip().startswith("/map"):
         parts = req.message.strip().split(None, 1)
@@ -647,7 +648,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             if fn_match:
                 fn_name = fn_match.group(1)
                 args_str = fn_match.group(2)
-                exec_result = dispatch_fncall(fn_name, args_str)
+                exec_result = dispatch_fncall(fn_name, args_str, session_id=session_id)
                 observation = f"✿RESULT✿: {exec_result}"
             else:
                 break
