@@ -37,3 +37,9 @@
 4. **Test Basic Commands**: Use `/hello`, `/memory`, and other basic commands to verify functionality.
 
 - These tasks will help in setting up a smooth initial session on Linux, ensuring that all components work correctly post-migration.
+
+## Enhance Workspace Behavior Rules for Session Compression
+To manually trigger session compression after a session, users can use the following command:
+```
+/compress
+```
