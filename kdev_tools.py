@@ -511,6 +511,7 @@ class MemoryWrite(BaseTool):
 
 
 
+import re as re  # Session 14
 # -- ExperimentTracker (Session 14) --
 # Writes experiment metadata to /global/experiments/<task_id> in VFS.
 # Uses __global__ session so nodes persist across all future sessions.
