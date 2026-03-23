@@ -271,67 +271,153 @@ Be terse. This will be injected into a system prompt — every word costs tokens
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Skill Loading — inject relevant skills into system prompt
+#  Skill Index — semantic retrieval via sentence-transformers
+# ══════════════════════════════════════════════════════════════════════════════
+import numpy as np
+
+class SkillIndex:
+    """
+    Builds and caches a semantic embedding index over ~/.kdev/skills/*.md.
+    Rebuilt only when the skills directory mtime changes.
+    """
+    MODEL_NAME  = "all-MiniLM-L6-v2"
+    INDEX_NPY   = KDEV_DIR / "skills.index.npy"
+    INDEX_JSON  = KDEV_DIR / "skills.index.json"
+    MTIME_FILE  = KDEV_DIR / "skills.index.mtime"
+
+    def __init__(self):
+        self._model  = None
+        self._vecs   = None
+        self._meta   = []
+        self._mtime  = None
+        self._load_or_build()
+
+    def _get_model(self):
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(self.MODEL_NAME)
+        return self._model
+
+    def _skills_mtime(self) -> float:
+        try:
+            return SKILLS_DIR.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    def _cached_mtime(self) -> float:
+        try:
+            return float(self.MTIME_FILE.read_text().strip())
+        except Exception:
+            return -1.0
+
+    def _build(self):
+        import json as _json
+        skill_files = sorted(SKILLS_DIR.rglob("*.md"), reverse=True)
+        if not skill_files:
+            self._vecs = np.zeros((0, 384), dtype=np.float32)
+            self._meta = []
+            return
+        texts = []
+        meta  = []
+        for sf in skill_files:
+            try:
+                text = sf.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            title_m   = re.search(r"title:\s*(.+)", text) or re.search(r"name:\s*(.+)", text)
+            tags_m    = re.search(r"tags:\s*(.+)", text)
+            summary_m = re.search(r"summary:\s*(.+)", text) or re.search(r"description:\s*(.+)", text)
+            label   = title_m.group(1).strip()   if title_m   else sf.stem
+            summary = summary_m.group(1).strip() if summary_m else ""
+            tags    = tags_m.group(1).strip()    if tags_m    else ""
+            embed_text = " ".join(filter(None, [label, tags, summary]))
+            texts.append(embed_text)
+            meta.append({"path": str(sf), "text": text, "label": label, "summary": summary})
+        if not texts:
+            self._vecs = np.zeros((0, 384), dtype=np.float32)
+            self._meta = []
+            return
+        model = self._get_model()
+        vecs  = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        self._vecs = vecs.astype(np.float32)
+        self._meta = meta
+        np.save(str(self.INDEX_NPY), self._vecs)
+        self.INDEX_JSON.write_text(_json.dumps(self._meta, ensure_ascii=False), encoding="utf-8")
+        self.MTIME_FILE.write_text(str(self._skills_mtime()))
+
+    def _load_or_build(self):
+        import json as _json
+        current_mtime = self._skills_mtime()
+        if (self.INDEX_NPY.exists()
+                and self.INDEX_JSON.exists()
+                and self._cached_mtime() == current_mtime):
+            try:
+                self._vecs = np.load(str(self.INDEX_NPY))
+                self._meta = _json.loads(self.INDEX_JSON.read_text(encoding="utf-8"))
+                self._mtime = current_mtime
+                return
+            except Exception:
+                pass
+        self._build()
+        self._mtime = current_mtime
+
+    def refresh_if_stale(self):
+        current_mtime = self._skills_mtime()
+        if current_mtime != self._mtime:
+            self._build()
+            self._mtime = current_mtime
+
+    def top_k(self, query: str, k: int = 3) -> list:
+        """Return top-k skill metadata dicts sorted by cosine similarity."""
+        self.refresh_if_stale()
+        if self._vecs is None or len(self._vecs) == 0:
+            return []
+        model  = self._get_model()
+        q_vec  = model.encode([query], normalize_embeddings=True,
+                               show_progress_bar=False)[0].astype(np.float32)
+        scores = self._vecs @ q_vec
+        idx    = np.argsort(scores)[::-1][:k]
+        return [dict(score=float(scores[i]), **self._meta[i]) for i in idx]
+
+
+_skill_index = None
+
+def _get_skill_index():
+    global _skill_index
+    if _skill_index is None:
+        _skill_index = SkillIndex()
+    return _skill_index
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Skill Loading — semantic retrieval (replaces keyword matcher)
 # ══════════════════════════════════════════════════════════════════════════════
 def load_relevant_skills(task: str, max_skills: int = 3) -> str:
     """
-    Keyword-match task against skill doc titles/tags/summaries.
+    Semantic search over skill docs using sentence-transformers cosine similarity.
     Returns a formatted string to append to the system prompt.
     """
     if not SKILLS_DIR.exists():
         return ""
-
-    skill_files = sorted(SKILLS_DIR.rglob("*.md"), reverse=True)
-    if not skill_files:
+    try:
+        index   = _get_skill_index()
+        results = index.top_k(task, k=max_skills)
+    except Exception:
         return ""
-
-    task_words = set(re.findall(r"\w+", task.lower()))
-    scored: list[tuple[int, Path, str]] = []
-
-    for sf in skill_files:
-        try:
-            text = sf.read_text(encoding="utf-8")
-        except Exception:
-            continue
-
-        # Extract header fields — supports both KDEV format (title/summary)
-        # and Antigravity format (name/description)
-        title_m   = re.search(r"title:\s*(.+)", text) or re.search(r"name:\s*(.+)", text)
-        tags_m    = re.search(r"tags:\s*(.+)", text)
-        summary_m = re.search(r"summary:\s*(.+)", text) or re.search(r"description:\s*(.+)", text)
-
-        header = " ".join(filter(None, [
-            title_m.group(1)   if title_m   else "",
-            tags_m.group(1)    if tags_m    else "",
-            summary_m.group(1) if summary_m else "",
-        ])).lower()
-
-        header_words = set(re.findall(r"\w+", header))
-        score = len(task_words & header_words)
-        if score > 0:
-            scored.append((score, sf, text))
-
-    if not scored:
+    if not results:
         return ""
-
-    scored.sort(reverse=True)
-    top = scored[:max_skills]
-
     parts = ["## Relevant skills from previous sessions\n"]
-    for _, sf, text in top:
-        # Strip the YAML front matter and just keep body
-        body = re.sub(r"^---.*?---\s*", "", text, flags=re.DOTALL).strip()
-        summary_m = re.search(r"summary:\s*(.+)", text) or re.search(r"description:\s*(.+)", text)
-        title_m   = re.search(r"title:\s*(.+)", text) or re.search(r"name:\s*(.+)", text)
-        label = (title_m.group(1) if title_m else sf.stem)
+    for r in results:
+        text    = r["text"]
+        label   = r["label"]
+        summary = r["summary"]
+        body    = re.sub(r"^---.*?---\s*", "", text, flags=re.DOTALL).strip()
         parts.append(f"### {label}")
-        if summary_m:
-            parts.append(f"*{summary_m.group(1)}*\n")
-        parts.append(body[:600])   # cap at 600 chars per skill
+        if summary:
+            parts.append(f"*{summary}*\n")
+        parts.append(body[:600])
         parts.append("")
-
     return "\n".join(parts)
-
 
 def list_skills() -> list[dict]:
     """Return metadata for all skill docs (for /skills command)."""
