@@ -54,7 +54,7 @@ Injected into every session's system prompt. Edit freely to add context about th
 |---------|--------|-------|
 | Interactive REPL | ✅ Working | `python3 kdev.py` |
 | Single-shot mode | ✅ Working | `python3 kdev.py "do X"` |
-| Ollama backend | ✅ Wired, needs `.env` | Set `OLLAMA_BASE_URL` + `OLLAMA_MODEL` in your `.env` file. Example: `export EDITOR=vim` for using `vim`. |
+| Ollama backend | ✅ Wired, needs `.env` | Set `OLLAMA_BASE_URL` + `OLLAMA_MODEL` in your `.env` file. Example: `export EDITOR=vim` for using `vim`. To verify the current Ollama backend configuration, run `echo $OLLAMA_BASE_URL` and `echo $OLLAMA_MODEL`. |
 | Bedrock backend | ✅ Working (Windows) | Token may be expired — test it |
 | Streaming output | ✅ Working | Tokens print live to terminal |
 | Thinking model support | ✅ Working | `<think>` blocks shown as `◌ first line…` |
@@ -79,15 +79,5 @@ Injected into every session's system prompt. Edit freely to add context about th
    - Example command to set `EDITOR`:
      ```bash
      export EDITOR=vim
-     ```
-2. **Verify Ollama** is running and `qwen2.5-abliterate:14b-instruct-q4_K_M` is pulled
-3. **Fix `/memory` command** — `os.startfile()` is Windows-only, will crash on Linux
-   - In `kdev.py` at the `/memory` handler (~line 633): replace `os.startfile(str(MEMORY_FILE))` with:
-     ```python
-     import subprocess
-     subprocess.Popen([os.getenv("EDITOR", "nano"), str(MEMORY_FILE)])
-     ```
 
----
-
-**Note:** If you prefer using an editor other than `nano`, set the `EDITOR` environment variable to your preferred editor before running `kdev.py`.
+... [truncated]
