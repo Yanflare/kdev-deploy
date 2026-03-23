@@ -1,7 +1,3 @@
-# User Memory — kdev global context
-
-Injected into every kdev session across all workspaces.
-
 ## About Me
 - Running kdev on Linux (migrated from Windows 2026-03-14)
 - Primary LLM: Ollama local, model qwen2.5-abliterate:14b-instruct-q4_K_M
@@ -10,7 +6,7 @@ Injected into every kdev session across all workspaces.
 ## Preferences
 - Prefer concise, direct responses — skip preamble
 - Always read code before editing — no guessing at structure
-- One task at a time — do not chain multiple actions unprompted
+- Tasks should be broken down and completed one at a time without chaining multiple actions unprompted
 - Avoid complex actions without explicit instructions
 - The `/memory` command currently opens files with an editor but does not specify which editor. Users can set their preferred editor via environment variables.
 
