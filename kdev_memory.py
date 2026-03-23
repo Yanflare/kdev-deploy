@@ -59,6 +59,18 @@ def get_db() -> sqlite3.Connection:
             insight     TEXT NOT NULL,
             created_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS memory_nodes (
+            session_id  TEXT    NOT NULL,
+            path        TEXT    NOT NULL,
+            gist        TEXT    NOT NULL DEFAULT '',
+            content     TEXT,
+            is_dir      INTEGER NOT NULL DEFAULT 0,
+            created_at  INTEGER NOT NULL,
+            updated_at  INTEGER NOT NULL,
+            PRIMARY KEY (session_id, path)
+        );
+        CREATE INDEX IF NOT EXISTS idx_memory_nodes_session
+            ON memory_nodes (session_id, path);
     """)
     db.commit()
     return db
@@ -159,6 +171,243 @@ def get_memory_stats() -> dict:
     db.close()
     return {"total_memories": total, "unconsolidated": unconsolidated,
             "consolidations": consolidations}
+
+
+# -- VFS Memory (ported from snoglobe/helios memory-store + global-memory) --
+
+import time as _time
+
+def _vfs_validate_path(path: str) -> str:
+    if not path.startswith('/'):
+        path = '/' + path
+    parts = path.split('/')
+    resolved = []
+    for p in parts:
+        if p == '..':
+            if resolved:
+                resolved.pop()
+        elif p not in ('', '.'):
+            resolved.append(p)
+    tail = '/' if (path.endswith('/') and resolved) else ''
+    return '/' + '/'.join(resolved) + tail
+
+def _vfs_normalize_dir(path: str) -> str:
+    if path == '/':
+        return '/'
+    return path if path.endswith('/') else path + '/'
+
+
+class MemoryVFS:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+
+    def _db(self):
+        return get_db()
+
+    def ls(self, dir_path: str = '/') -> list:
+        normalized = _vfs_normalize_dir(_vfs_validate_path(dir_path))
+        prefix_len = len(normalized)
+        db = self._db()
+        rows = db.execute(
+            'SELECT path, gist, is_dir, created_at, updated_at'
+            ' FROM memory_nodes'
+            ' WHERE session_id = ? AND path LIKE ? AND path != ?',
+            (self.session_id, normalized + '%', normalized)
+        ).fetchall()
+        db.close()
+        result = []
+        for r in rows:
+            rel = r['path'][prefix_len:]
+            if '/' not in rel or (rel.endswith('/') and '/' not in rel[:-1]):
+                result.append(dict(r))
+        return result
+
+    def tree(self, dir_path: str = '/') -> list:
+        normalized = _vfs_normalize_dir(_vfs_validate_path(dir_path))
+        db = self._db()
+        rows = db.execute(
+            'SELECT path, gist, is_dir FROM memory_nodes'
+            ' WHERE session_id = ? AND path LIKE ? AND path != ?'
+            ' ORDER BY path',
+            (self.session_id, normalized + '%', normalized)
+        ).fetchall()
+        db.close()
+        return [dict(r) for r in rows]
+
+    def read(self, path: str):
+        path = _vfs_validate_path(path)
+        db = self._db()
+        row = db.execute(
+            'SELECT path, gist, content, is_dir, created_at, updated_at'
+            ' FROM memory_nodes WHERE session_id = ? AND path = ?',
+            (self.session_id, path)
+        ).fetchone()
+        db.close()
+        return dict(row) if row else None
+
+    def write(self, path: str, gist: str, content=None) -> None:
+        path = _vfs_validate_path(path)
+        now = int(_time.time() * 1000)
+        is_dir = 1 if content is None else 0
+        self._ensure_parents(path)
+        db = self._db()
+        db.execute(
+            'INSERT INTO memory_nodes'
+            ' (session_id, path, gist, content, is_dir, created_at, updated_at)'
+            ' VALUES (?, ?, ?, ?, ?, ?, ?)'
+            ' ON CONFLICT(session_id, path) DO UPDATE SET'
+            ' gist=excluded.gist, content=excluded.content,'
+            ' is_dir=excluded.is_dir, updated_at=excluded.updated_at',
+            (self.session_id, path, gist, content, is_dir, now, now)
+        )
+        db.commit()
+        db.close()
+
+    def rm(self, path: str) -> int:
+        path = _vfs_validate_path(path)
+        like = (path + '%') if path.endswith('/') else (path + '/%')
+        db = self._db()
+        result = db.execute(
+            'DELETE FROM memory_nodes WHERE session_id = ? AND (path = ? OR path LIKE ?)',
+            (self.session_id, path, like)
+        )
+        db.commit()
+        count = result.rowcount
+        db.close()
+        return count
+
+    def exists(self, path: str) -> bool:
+        path = _vfs_validate_path(path)
+        db = self._db()
+        row = db.execute(
+            'SELECT 1 FROM memory_nodes WHERE session_id = ? AND path = ?',
+            (self.session_id, path)
+        ).fetchone()
+        db.close()
+        return row is not None
+
+    def count(self) -> int:
+        db = self._db()
+        row = db.execute(
+            'SELECT COUNT(*) as c FROM memory_nodes WHERE session_id = ?',
+            (self.session_id,)
+        ).fetchone()
+        db.close()
+        return row['c']
+
+    def format_tree(self, dir_path: str = '/') -> str:
+        nodes = self.tree(dir_path)
+        if not nodes:
+            return '(empty)'
+        lines = []
+        for node in nodes:
+            parts = [p for p in node['path'].split('/') if p]
+            depth = len(parts) - 1
+            indent = '  ' * depth
+            name = parts[-1] + ('/' if node['is_dir'] else '')
+            lines.append(indent + name + ': ' + node['gist'])
+        return '\n'.join(lines)
+
+    def clear(self) -> None:
+        db = self._db()
+        db.execute('DELETE FROM memory_nodes WHERE session_id = ?', (self.session_id,))
+        db.commit()
+        db.close()
+
+    def _ensure_parents(self, path: str) -> None:
+        parts = [p for p in path.split('/') if p]
+        if len(parts) <= 1:
+            return
+        now = int(_time.time() * 1000)
+        db = self._db()
+        for i in range(1, len(parts)):
+            parent_path = '/' + '/'.join(parts[:i]) + '/'
+            db.execute(
+                'INSERT OR IGNORE INTO memory_nodes'
+                ' (session_id, path, gist, content, is_dir, created_at, updated_at)'
+                ' VALUES (?, ?, ?, NULL, 1, ?, ?)',
+                (self.session_id, parent_path, parts[i - 1], now, now)
+            )
+        db.commit()
+        db.close()
+
+
+_GLOBAL_SESSION_ID = '__global__'
+_GLOBAL_PREFIX     = '/global/'
+
+
+class GlobalMemoryVFS(MemoryVFS):
+    def __init__(self, session_id: str):
+        super().__init__(session_id)
+        self._global = MemoryVFS(_GLOBAL_SESSION_ID)
+
+    def _is_global(self, path: str) -> bool:
+        return path in ('/global/', '/global') or path.startswith(_GLOBAL_PREFIX)
+
+    def _to_global_path(self, path: str) -> str:
+        if path in ('/global/', '/global'):
+            return '/'
+        return path[len(_GLOBAL_PREFIX) - 1:]
+
+    def _from_global_path(self, path: str) -> str:
+        if path == '/':
+            return '/global/'
+        return '/global' + path
+
+    def _map_node(self, node: dict) -> dict:
+        return dict(node, path=self._from_global_path(node['path']))
+
+    def ls(self, dir_path: str = '/') -> list:
+        if dir_path == '/':
+            session_children = super().ls('/')
+            has_global = self._global.count() > 0
+            has_global_dir = any(n['path'] == '/global/' for n in session_children)
+            if has_global and not has_global_dir:
+                synthetic = {'path': '/global/', 'gist': 'shared knowledge (persists across sessions)',
+                             'content': None, 'is_dir': 1, 'created_at': 0, 'updated_at': 0}
+                return [synthetic] + [n for n in session_children if not n['path'].startswith('/global')]
+            return session_children
+        if self._is_global(dir_path):
+            return [self._map_node(n) for n in self._global.ls(self._to_global_path(dir_path))]
+        return super().ls(dir_path)
+
+    def tree(self, dir_path: str = '/') -> list:
+        if dir_path in ('/', ''):
+            session_tree = super().tree('/')
+            global_tree  = [self._map_node(n) for n in self._global.tree('/')]
+            return sorted(global_tree + session_tree, key=lambda n: n['path'])
+        if self._is_global(dir_path):
+            return [self._map_node(n) for n in self._global.tree(self._to_global_path(dir_path))]
+        return super().tree(dir_path)
+
+    def read(self, path: str):
+        if self._is_global(path):
+            node = self._global.read(self._to_global_path(path))
+            return self._map_node(node) if node else None
+        return super().read(path)
+
+    def write(self, path: str, gist: str, content=None) -> None:
+        if self._is_global(path):
+            self._global.write(self._to_global_path(path), gist, content)
+            return
+        super().write(path, gist, content)
+
+    def rm(self, path: str) -> int:
+        if self._is_global(path):
+            return self._global.rm(self._to_global_path(path))
+        return super().rm(path)
+
+    def exists(self, path: str) -> bool:
+        if self._is_global(path):
+            return self._global.exists(self._to_global_path(path))
+        return super().exists(path)
+
+    def count(self) -> int:
+        return super().count() + self._global.count()
+
+
+def vfs_get(session_id: str) -> GlobalMemoryVFS:
+    return GlobalMemoryVFS(session_id)
 
 
 # ── Ollama helper ─────────────────────────────────────────────────────────────

@@ -183,7 +183,335 @@ class WebSearch(BaseTool):
 
 # ── Tools system prompt builder ───────────────────────────────────────────────
 
-KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search']
+# -- Metric store (ported from snoglobe/helios metrics/) --
+
+import sqlite3 as _sqlite3
+import math as _math
+import re as _re
+import time as _mtime
+
+_METRIC_DB_PATH = Path.home() / '.kdev' / 'memory.db'
+
+
+def _metric_db():
+    db = _sqlite3.connect(str(_METRIC_DB_PATH))
+    db.row_factory = _sqlite3.Row
+    db.executescript(
+        'CREATE TABLE IF NOT EXISTS metric_points ('
+        '    id          INTEGER PRIMARY KEY AUTOINCREMENT,'
+        '    task_id     TEXT    NOT NULL,'
+        '    metric_name TEXT    NOT NULL,'
+        '    value       REAL    NOT NULL,'
+        '    ts          INTEGER NOT NULL'
+        ');'
+        'CREATE INDEX IF NOT EXISTS idx_metric_task'
+        '    ON metric_points (task_id, metric_name, ts);'
+    )
+    db.commit()
+    return db
+
+
+class MetricStore:
+    def add(self, task_id: str, metric_name: str, value: float) -> None:
+        db = _metric_db()
+        db.execute(
+            'INSERT INTO metric_points (task_id, metric_name, value, ts) VALUES (?,?,?,?)',
+            (task_id, metric_name, value, int(_mtime.time() * 1000))
+        )
+        db.commit()
+        db.close()
+
+    def get_points(self, task_id: str, metric_name: str) -> list:
+        db = _metric_db()
+        rows = db.execute(
+            'SELECT value, ts FROM metric_points WHERE task_id=? AND metric_name=? ORDER BY ts',
+            (task_id, metric_name)
+        ).fetchall()
+        db.close()
+        return [{'value': r['value'], 'ts': r['ts']} for r in rows]
+
+    def get_task_summary(self, task_id: str) -> dict:
+        db = _metric_db()
+        rows = db.execute(
+            'SELECT metric_name, value FROM metric_points WHERE task_id=? ORDER BY ts',
+            (task_id,)
+        ).fetchall()
+        db.close()
+        buckets = {}
+        for r in rows:
+            name = r['metric_name']
+            v = r['value']
+            if name not in buckets:
+                buckets[name] = {'values': [], 'min': v, 'max': v}
+            buckets[name]['values'].append(v)
+            if v < buckets[name]['min']:
+                buckets[name]['min'] = v
+            if v > buckets[name]['max']:
+                buckets[name]['max'] = v
+        summary = {}
+        for name, b in buckets.items():
+            summary[name] = {
+                'latest': b['values'][-1],
+                'min':    b['min'],
+                'max':    b['max'],
+                'count':  len(b['values']),
+            }
+        return summary
+
+    def list_tasks(self) -> list:
+        db = _metric_db()
+        rows = db.execute(
+            'SELECT DISTINCT task_id FROM metric_points ORDER BY task_id'
+        ).fetchall()
+        db.close()
+        return [r['task_id'] for r in rows]
+
+
+METRIC_STORE = MetricStore()
+
+
+def parse_metrics(output: str, metric_names: list) -> list:
+    patterns = {}
+    for name in metric_names:
+        escaped = _re.escape(name)
+        patterns[name] = _re.compile(
+            r'(?:^|\s|,)' + escaped + r'\s*[=:]\s*([+-]?\d+\.?\d*(?:e[+-]?\d+)?)',
+            _re.IGNORECASE
+        )
+    points = []
+    now = int(_mtime.time() * 1000)
+    for line in output.split('\n'):
+        for name, pat in patterns.items():
+            m = pat.search(line)
+            if m:
+                try:
+                    v = float(m.group(1))
+                    if _math.isfinite(v):
+                        points.append({'metric_name': name, 'value': v, 'ts': now})
+                except ValueError:
+                    pass
+    return points
+
+
+def analyze_metric(points: list, window: int = 20) -> dict:
+    if len(points) < 3:
+        cur = points[-1]['value'] if points else 0
+        return {'trend': 'insufficient_data', 'slope': 0, 'current': cur, 'mean': 0, 'std': 0}
+    values = [p['value'] for p in points[-window:]]
+    valid  = [v for v in values if _math.isfinite(v)]
+    if len(valid) < 3:
+        return {'trend': 'unstable', 'slope': 0, 'current': values[-1], 'mean': 0, 'std': 0}
+    n    = len(valid)
+    mean = sum(valid) / n
+    std  = _math.sqrt(sum((v - mean) ** 2 for v in valid) / n)
+    xm   = (n - 1) / 2
+    num  = sum((i - xm) * (valid[i] - mean) for i in range(n))
+    den  = sum((i - xm) ** 2 for i in range(n))
+    slope = num / den if den else 0
+    thresh = std * 0.1 or 1e-6
+    if abs(slope) < thresh:
+        trend = 'plateau'
+    elif slope < 0:
+        trend = 'decreasing'
+    else:
+        trend = 'increasing'
+    return {'trend': trend, 'slope': round(slope, 6), 'current': valid[-1],
+            'mean': round(mean, 6), 'std': round(std, 6)}
+
+
+# -- 6. show_metrics --
+
+@register_tool('show_metrics')
+class ShowMetrics(BaseTool):
+    description = (
+        'Show stored metric values for a running or finished task. '
+        'Returns latest/min/max/count and trend (decreasing/plateau/increasing/unstable) '
+        'for each metric. task_id format: "machine_id:pid" or any label you used.'
+    )
+    parameters = [
+        {'name': 'task_id', 'type': 'string',
+         'description': 'Task identifier (e.g. "local:12345" or "kiki:12345").', 'required': True},
+        {'name': 'metric_names', 'type': 'string',
+         'description': 'Comma-separated metric names to filter. Omit to show all.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            task_id = p['task_id']
+            filter_names = [n.strip() for n in p['metric_names'].split(',')] if p.get('metric_names') else None
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        summary = METRIC_STORE.get_task_summary(task_id)
+        if not summary:
+            tasks = METRIC_STORE.list_tasks()
+            return json.dumps({'error': f'No metrics for {task_id}', 'available_tasks': tasks})
+        if filter_names:
+            summary = {k: v for k, v in summary.items() if k in filter_names}
+        result = {}
+        for name, s in summary.items():
+            points = METRIC_STORE.get_points(task_id, name)
+            analysis = analyze_metric(points)
+            result[name] = {**s, 'trend': analysis['trend'], 'slope': analysis['slope']}
+        return json.dumps({'task_id': task_id, 'metrics': result})
+
+
+# -- 7. compare_runs --
+
+@register_tool('compare_runs')
+class CompareRuns(BaseTool):
+    description = (
+        'Compare metrics between two experiment runs side-by-side. '
+        'Shows latest/min/max and delta for each metric. '
+        'Use this to decide whether to keep or discard an experiment.'
+    )
+    parameters = [
+        {'name': 'task_a', 'type': 'string',
+         'description': 'Baseline task ID.', 'required': True},
+        {'name': 'task_b', 'type': 'string',
+         'description': 'New task ID to compare against baseline.', 'required': True},
+        {'name': 'metric_names', 'type': 'string',
+         'description': 'Comma-separated metric names to compare. Omit for all shared metrics.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            task_a = p['task_a']
+            task_b = p['task_b']
+            filter_names = [n.strip() for n in p['metric_names'].split(',')] if p.get('metric_names') else None
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        sa = METRIC_STORE.get_task_summary(task_a)
+        sb = METRIC_STORE.get_task_summary(task_b)
+        if not sa:
+            return json.dumps({'error': f'No metrics for {task_a}'})
+        if not sb:
+            return json.dumps({'error': f'No metrics for {task_b}'})
+        all_names = set(list(sa.keys()) + list(sb.keys()))
+        names = [n for n in filter_names if n in all_names] if filter_names else sorted(all_names)
+        comparisons = []
+        for name in names:
+            a = sa.get(name)
+            b = sb.get(name)
+            delta = round(b['latest'] - a['latest'], 6) if a and b else None
+            if delta is None:
+                direction = 'n/a'
+            elif delta < -0.0001:
+                direction = 'decreased'
+            elif delta > 0.0001:
+                direction = 'increased'
+            else:
+                direction = 'unchanged'
+            comparisons.append({
+                'metric':     name,
+                'baseline':   a,
+                'experiment': b,
+                'delta':      delta,
+                'direction':  direction,
+            })
+        return json.dumps({'task_a': task_a, 'task_b': task_b, 'comparisons': comparisons})
+
+
+# -- 8. memory_ls --
+
+@register_tool('memory_ls')
+class MemoryLs(BaseTool):
+    description = (
+        'List the VFS memory tree. Shows paths and one-line gists. '
+        'Use path="/" for the full tree, or a subpath like "/experiments/".'
+    )
+    parameters = [
+        {'name': 'path', 'type': 'string',
+         'description': 'Directory path to list. Default: "/".', 'required': False},
+        {'name': 'session_id', 'type': 'string',
+         'description': 'Session ID to query. Omit to use current session.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            path       = p.get('path', '/')
+            session_id = p.get('session_id') or kwargs.get('session_id', 'default')
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            from kdev_memory import vfs_get
+            vfs = vfs_get(session_id)
+            return vfs.format_tree(path)
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
+# -- 9. memory_read --
+
+@register_tool('memory_read')
+class MemoryRead(BaseTool):
+    description = 'Read the full content of a VFS memory node by path.'
+    parameters = [
+        {'name': 'path', 'type': 'string',
+         'description': 'Absolute VFS path, e.g. "/goal" or "/experiments/01-baseline".', 'required': True},
+        {'name': 'session_id', 'type': 'string',
+         'description': 'Session ID. Omit to use current session.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            path       = p['path']
+            session_id = p.get('session_id') or kwargs.get('session_id', 'default')
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            from kdev_memory import vfs_get
+            node = vfs_get(session_id).read(path)
+            if node is None:
+                return json.dumps({'error': f'Path not found: {path}'})
+            return json.dumps({'path': node['path'], 'gist': node['gist'],
+                               'content': node['content'], 'is_dir': bool(node['is_dir'])})
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
+# -- 10. memory_write --
+
+@register_tool('memory_write')
+class MemoryWrite(BaseTool):
+    description = (
+        'Write a node to VFS memory. Use this to persist goals, observations, '
+        'experiment results, or any structured notes across the session. '
+        'Prefix path with /global/ to persist across sessions.'
+    )
+    parameters = [
+        {'name': 'path', 'type': 'string',
+         'description': 'VFS path, e.g. "/goal" or "/global/hardware".', 'required': True},
+        {'name': 'gist', 'type': 'string',
+         'description': 'One-line summary shown in tree view.', 'required': True},
+        {'name': 'content', 'type': 'string',
+         'description': 'Full content of the node. Omit to create a directory node.', 'required': False},
+        {'name': 'session_id', 'type': 'string',
+         'description': 'Session ID. Omit to use current session.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            path       = p['path']
+            gist       = p['gist']
+            content    = p.get('content', None)
+            session_id = p.get('session_id') or kwargs.get('session_id', 'default')
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            from kdev_memory import vfs_get
+            vfs_get(session_id).write(path, gist, content)
+            return json.dumps({'ok': True, 'path': path})
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
+KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
+              'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write']
 
 
 def build_tools_system_prompt() -> str:
