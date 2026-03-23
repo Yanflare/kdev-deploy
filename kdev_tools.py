@@ -510,8 +510,180 @@ class MemoryWrite(BaseTool):
             return json.dumps({'error': str(e)})
 
 
+# -- SSH tools (multi-machine extension, Helios remote pattern) --
+
+import subprocess as _sp
+import shlex as _shlex
+
+_MACHINES_PATH = Path.home() / '.kdev' / 'machines.json'
+
+
+def _load_machines() -> dict:
+    if not _MACHINES_PATH.exists():
+        return {'local': {'host': 'localhost', 'user': 'local', 'port': 22, 'key_path': None}}
+    try:
+        return json.loads(_MACHINES_PATH.read_text())
+    except Exception:
+        return {'local': {'host': 'localhost', 'user': 'local', 'port': 22, 'key_path': None}}
+
+
+def _ssh_cmd_prefix(machine_id: str) -> list:
+    if machine_id == 'local':
+        return []
+    machines = _load_machines()
+    if machine_id not in machines:
+        raise ValueError(f'Unknown machine: {machine_id}. Add it to ~/.kdev/machines.json')
+    m = machines[machine_id]
+    cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes']
+    if m.get('port') and m['port'] != 22:
+        cmd += ['-p', str(m['port'])]
+    if m.get('key_path'):
+        cmd += ['-i', m['key_path']]
+    cmd.append(f"{m['user']}@{m['host']}")
+    return cmd
+
+
+def _run_remote(machine_id: str, command: str, timeout: int = 30) -> dict:
+    prefix = _ssh_cmd_prefix(machine_id)
+    if prefix:
+        full_cmd = prefix + [command]
+        result = _sp.run(full_cmd, capture_output=True, text=True, timeout=timeout)
+    else:
+        result = _sp.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
+    return {
+        'stdout':    result.stdout[:4000],
+        'stderr':    result.stderr[:2000],
+        'exit_code': result.returncode,
+    }
+
+
+# -- 11. ssh_exec --
+
+@register_tool('ssh_exec')
+class SshExec(BaseTool):
+    description = (
+        'Run a short shell command on a named machine (local or remote via SSH). '
+        'Returns stdout, stderr, exit_code. For commands that take more than ~30s '
+        'use ssh_exec_background instead. '
+        'machine_id "local" runs on this machine directly. '
+        'Other machine IDs must be configured in ~/.kdev/machines.json.'
+    )
+    parameters = [
+        {'name': 'machine_id', 'type': 'string',
+         'description': 'Machine to run on. Use "local" for this machine.', 'required': True},
+        {'name': 'command', 'type': 'string',
+         'description': 'Shell command to execute.', 'required': True},
+        {'name': 'timeout', 'type': 'string',
+         'description': 'Timeout in seconds (default 30).', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            machine_id = p['machine_id']
+            command    = p['command']
+            timeout    = int(p.get('timeout', 30))
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            return json.dumps(_run_remote(machine_id, command, timeout))
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
+# -- 12. ssh_exec_background --
+
+@register_tool('ssh_exec_background')
+class SshExecBackground(BaseTool):
+    description = (
+        'Launch a long-running command in the background on a named machine. '
+        'Uses nohup so the process survives SSH disconnection. '
+        'Returns pid and log_path. Stdout/stderr go to log_path. '
+        'Use ssh_tail to watch the log. Use ssh_exec with "kill -0 <pid>" to check liveness. '
+        'Exit code is written to log_path.exit when the process finishes.'
+    )
+    parameters = [
+        {'name': 'machine_id', 'type': 'string',
+         'description': 'Machine to run on. Use "local" for this machine.', 'required': True},
+        {'name': 'command', 'type': 'string',
+         'description': 'Command to run in the background.', 'required': True},
+        {'name': 'log_path', 'type': 'string',
+         'description': 'Path for stdout/stderr log. Auto-generated if omitted.', 'required': False},
+        {'name': 'metric_names', 'type': 'string',
+         'description': 'Comma-separated metric names to parse from stdout (key=value format).', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            machine_id   = p['machine_id']
+            command      = p['command']
+            log_path     = p.get('log_path') or f'/tmp/kdev-{int(__import__("time").time())}.log'
+            metric_names = [n.strip() for n in p['metric_names'].split(',')] if p.get('metric_names') else []
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            # Escape for sh -c wrapper: single-quote the command
+            esc_cmd = command.replace("'", "'\\''")
+            esc_log = log_path.replace("'", "'\\''")
+            wrapped = (
+                f"PYTHONUNBUFFERED=1 nohup sh -c '"
+                f"{esc_cmd}; echo $? > {esc_log}.exit' "
+                f"> {log_path} 2>&1 & echo $!"
+            )
+            result = _run_remote(machine_id, wrapped, timeout=15)
+            if result['exit_code'] != 0:
+                return json.dumps({'error': f'launch failed: {result["stderr"]}'})
+            pid_str = result['stdout'].strip().split('\n')[-1].strip()
+            pid = int(pid_str)
+            if pid <= 0:
+                raise ValueError(f'invalid PID: {pid_str}')
+            task_id = f'{machine_id}:{pid}'
+            out = {'pid': pid, 'log_path': log_path, 'machine_id': machine_id, 'task_id': task_id}
+            # Register metric collection if requested
+            if metric_names:
+                out['tracking_metrics'] = metric_names
+                out['note'] = 'Use ssh_tail to watch log, then show_metrics to query parsed values'
+            return json.dumps(out)
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
+# -- 13. ssh_tail --
+
+@register_tool('ssh_tail')
+class SshTail(BaseTool):
+    description = (
+        'Tail the last N lines of a log file on a named machine. '
+        'Use this to watch training output from ssh_exec_background jobs.'
+    )
+    parameters = [
+        {'name': 'machine_id', 'type': 'string',
+         'description': 'Machine where the log lives.', 'required': True},
+        {'name': 'log_path', 'type': 'string',
+         'description': 'Absolute path to the log file.', 'required': True},
+        {'name': 'lines', 'type': 'string',
+         'description': 'Number of lines to return (default 50).', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            machine_id = p['machine_id']
+            log_path   = p['log_path']
+            lines      = int(p.get('lines', 50))
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            result = _run_remote(machine_id, f'tail -n {lines} {_shlex.quote(log_path)}', timeout=10)
+            return result['stdout'] or f'(log empty or not found: {log_path})'
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
-              'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write']
+              'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
+              'ssh_exec', 'ssh_exec_background', 'ssh_tail']
 
 
 def build_tools_system_prompt() -> str:
