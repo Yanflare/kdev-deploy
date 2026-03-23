@@ -755,19 +755,49 @@ class SshTail(BaseTool):
          'description': 'Absolute path to the log file.', 'required': True},
         {'name': 'lines', 'type': 'string',
          'description': 'Number of lines to return (default 50).', 'required': False},
+        {'name': 'task_id', 'type': 'string',
+         'description': 'Task ID from ssh_exec_background. Enables metric parsing and completion detection.', 'required': False},
+        {'name': 'metric_names', 'type': 'string',
+         'description': 'Comma-separated metric names to parse from log output (e.g. "loss,accuracy").', 'required': False},
     ]
 
     def call(self, params: str, **kwargs) -> str:
         try:
             p = json.loads(params)
-            machine_id = p['machine_id']
-            log_path   = p['log_path']
-            lines      = int(p.get('lines', 50))
+            machine_id   = p['machine_id']
+            log_path     = p['log_path']
+            lines        = int(p.get('lines', 50))
+            metric_names = [n.strip() for n in p['metric_names'].split(',')]  \
+                           if p.get('metric_names') else []
+            task_id      = p.get('task_id')
         except Exception as e:
             return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
         try:
             result = _run_remote(machine_id, f'tail -n {lines} {_shlex.quote(log_path)}', timeout=10)
-            return result['stdout'] or f'(log empty or not found: {log_path})'
+            output = result['stdout'] or ''
+            # Session 14 — on-demand metric parsing
+            if metric_names and task_id and output:
+                points = parse_metrics(output, metric_names)
+                for pt in points:
+                    METRIC_STORE.add(task_id, pt['metric_name'], pt['value'])
+            # Session 14 — check for process completion
+            if task_id:
+                exit_file = log_path + '.exit'
+                try:
+                    exit_result = _run_remote(
+                        machine_id,
+                        f'cat {_shlex.quote(exit_file)} 2>/dev/null',
+                        timeout=5,
+                    )
+                    exit_str = exit_result['stdout'].strip()
+                    if exit_str.lstrip('-').isdigit():
+                        exit_code = int(exit_str)
+                        summary = METRIC_STORE.get_task_summary(task_id)
+                        final = {k: v['latest'] for k, v in summary.items()} if summary else None
+                        on_experiment_complete(task_id, exit_code, final)
+                except Exception:
+                    pass  # .exit not found yet — process still running
+            return output or f'(log empty or not found: {log_path})'
         except Exception as e:
             return json.dumps({'error': str(e)})
 
