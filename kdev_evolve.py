@@ -5,7 +5,7 @@ kdev_evolve.py — KDEV Self-Improvement Loop
 Borrowed pattern: yoyo-evolve (github.com/yologdev/yoyo-evolve)
 Adapted for:     Pure Python + Ollama (no Rust, no GitHub Actions, no cloud)
 Model:           huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M
-Safe zones only: ~/.kdev/skills/, /home/yanflare/kdev-deploy/LINUX_BOOT_PROMPT.md, agent-memory/*.md
+Safe zones only: ~/.kdev/skills/, agent-memory/*.md
 
 Flow:
   1. Read safe-zone files (what can be touched)
@@ -60,7 +60,6 @@ PROTECTED = [
 
 # Safe zones — only these may be proposed for editing
 SAFE_ZONE_FILES = [
-    os.path.join(DEPLOY_DIR, "/home/yanflare/kdev-deploy/LINUX_BOOT_PROMPT.md"),
     os.path.join(DEPLOY_DIR, "agent-memory", "workspace-agent.md"),
     os.path.join(DEPLOY_DIR, "agent-memory", "user-agent.md"),
 ]
@@ -242,7 +241,6 @@ def run_planning(safe_zone_content: str, past_log: str) -> str:
 
     ## What you CAN touch (safe zone only):
     - ~/.kdev/skills/*.md  (add or improve skill files)
-    - /home/yanflare/kdev-deploy/LINUX_BOOT_PROMPT.md (improve the system prompt)
     - agent-memory/workspace-agent.md (improve workspace behaviour rules)
     - agent-memory/user-agent.md (improve user profile)
 
