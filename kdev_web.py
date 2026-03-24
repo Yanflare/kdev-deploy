@@ -288,7 +288,7 @@ async function sendMsg(){
           try{
             const obj=JSON.parse(data);
             if(typeof obj.token==='string'){bubble.textContent+=obj.token;chat.scrollTop=chat.scrollHeight;}
-          }catch(e){}
+          }catch(e){console.error("SSE parse error on:",data,"err:",e.message);}
         }
       }
     }
@@ -589,7 +589,8 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         query = req.message.strip()[len("/web-search"):].strip()
         if not query:
             async def _empty():
-                yield "Usage: /web-search <your query>"
+                yield "data: " + __import__("json").dumps({"token": "Usage: /web-search <your query>"}) + "\n\n"
+                yield "data: [DONE]\n\n"
             return StreamingResponse(_empty(), media_type="text/event-stream")
         search_results = web_search(query)
         augmented = search_results + "\n\nBased on the above web search results, answer: " + query
@@ -686,7 +687,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         if MEMORY_AVAILABLE:
             try:
                 loop = asyncio.get_event_loop()
-                loop.create_task(ingest_memory(req.message, full))
+                loop.create_task(ingest_memory(req.message, full, session_id=session_id))
             except Exception as e:
                 print(f"[memory] ingest create_task failed: {e}", flush=True)
 

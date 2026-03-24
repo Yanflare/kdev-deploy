@@ -43,6 +43,7 @@ def get_db() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS memories (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             source        TEXT    NOT NULL DEFAULT '',
+            session_id    TEXT    NOT NULL DEFAULT '',
             raw_text      TEXT    NOT NULL,
             summary       TEXT    NOT NULL,
             entities      TEXT    NOT NULL DEFAULT '[]',
@@ -72,19 +73,24 @@ def get_db() -> sqlite3.Connection:
         CREATE INDEX IF NOT EXISTS idx_memory_nodes_session
             ON memory_nodes (session_id, path);
     """)
+    try:
+        db.execute("ALTER TABLE memories ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
+    except Exception:
+        pass  # column already exists
     db.commit()
     return db
 
 
 def store_memory(raw_text: str, summary: str, entities: list,
-                 topics: list, importance: float, source: str = "") -> int:
+                 topics: list, importance: float, source: str = "",
+                 session_id: str = "") -> int:
     db = get_db()
     now = datetime.now(timezone.utc).isoformat()
     cur = db.execute(
         """INSERT INTO memories
-               (source, raw_text, summary, entities, topics, importance, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (source, raw_text, summary,
+               (source, session_id, raw_text, summary, entities, topics, importance, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (source, session_id, raw_text, summary,
          json.dumps(entities), json.dumps(topics), importance, now),
     )
     db.commit()
@@ -432,7 +438,7 @@ def _ollama(prompt: str, expect_json: bool = False) -> str:
 
 # ── IngestAgent ───────────────────────────────────────────────────────────────
 
-async def ingest_memory(user_msg: str, assistant_response: str) -> None:
+async def ingest_memory(user_msg: str, assistant_response: str, session_id: str = "") -> None:
     """
     Called after every KDEV response via asyncio.create_task().
     Extracts structured memory from the exchange and stores it.
@@ -466,7 +472,7 @@ importance scale: 0.8+ for decisions/patches/architecture. 0.5 for technical dis
         topics     = data.get("topics", [])[:4]
         importance = float(data.get("importance", 0.5))
         if summary:
-            store_memory(raw[:2000], summary, entities, topics, importance, source="kdev-chat")
+            store_memory(raw[:2000], summary, entities, topics, importance, source="kdev-chat", session_id=session_id)
     except Exception as e:
         log.warning(f"{LOG_PREFIX} ingest parse error: {e} | raw: {raw_json[:200]}")
 
