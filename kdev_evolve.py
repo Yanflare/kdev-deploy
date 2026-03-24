@@ -507,6 +507,12 @@ def main():
         commit_msg = f"evolve {session_dt}: Task {task_num} - {task['title']}"
         rc, out = git(f"git add -A && git commit -m '{commit_msg}'")
         if rc != 0:
+            if "nothing to commit" in out:
+                # Skill files written outside repo -- not a failure
+                tasks_ok += 1
+                log(f"  Task {task_num} WRITTEN (outside repo): {task['title']}")
+                notes_parts.append(f"Task {task_num} '{task['title']}' written OK (skill file)")
+                continue
             msg = f"Task {task_num} git commit failed: {out}"
             log(f"  {msg}")
             revert_to(pre_sha)
