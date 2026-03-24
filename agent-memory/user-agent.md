@@ -5,6 +5,7 @@
 ## Preferences
 - Concise responses; skip preamble
 - Read code before editing — no guessing at structure
+- Break down complex tasks into smaller steps
 - Break tasks into single actions without chaining unprompted
 - Avoid complex actions without explicit instructions
 
