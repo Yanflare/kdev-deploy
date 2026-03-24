@@ -43,3 +43,4 @@ To manually trigger session compression after a session, users can use the follo
 ```
 /compress
 ```
+When MCP tools are unavailable (e.g., on Linux), this command will degrade gracefully and perform basic session cleanup without compressing the session data.
