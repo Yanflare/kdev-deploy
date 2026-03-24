@@ -72,6 +72,9 @@ SAFE_ZONE_DIRS = [
 def now() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
+def today() -> str:
+    return datetime.datetime.now().strftime("%Y%m%d")
+
 def log(msg: str):
     print(f"[kdev-evolve] {msg}", flush=True)
 
@@ -235,8 +238,10 @@ def append_journal(session_dt: str, tasks_attempted: int, tasks_ok: int, notes: 
 # ── Phase A: Planning ─────────────────────────────────────────────────────────
 
 def run_planning(safe_zone_content: str, past_log: str) -> str:
+    today_str = today()
     prompt = textwrap.dedent(f"""
     You are KDEV's self-improvement agent running on Kiki (local Linux PC).
+    Today's date: {today_str}
     Your job: read the safe-zone files below and write a SESSION_PLAN.md.
 
     ## What you CAN touch (safe zone only):
@@ -273,6 +278,7 @@ def run_planning(safe_zone_content: str, past_log: str) -> str:
     - STRONGLY PREFER creating new skill files in ~/.kdev/skills/ over editing agent-memory files.
     - Only propose editing agent-memory files if you have a genuinely new, specific improvement.
     - When creating a skill, choose a topic NOT already in the skill inventory above.
+    - Skill filenames MUST start with today's date in YYYYMMDD format, e.g. {today_str}-my-skill-name.md
     - Output ONLY the SESSION_PLAN.md content. No preamble, no explanation.
     """).strip()
 
