@@ -593,6 +593,48 @@ def on_experiment_complete(
         import sys
         print(f"[ExperimentTracker] complete write failed: {_e}", file=sys.stderr)
 
+# -- Background metric poller (Session 15) --
+# Spawned by ssh_exec_background when metric_names are provided.
+# Polls the log every 10 seconds, stores metric points, detects completion.
+
+import asyncio as _asyncio
+
+async def _poll_metrics(task_id, machine_id, log_path, metric_names, interval=10):
+    """Poll log file every `interval` seconds, parse metrics, detect completion."""
+    import shlex as _sl
+    exit_file = log_path + '.exit'
+    seen_count = 0
+    while True:
+        await _asyncio.sleep(interval)
+        try:
+            result = _run_remote(machine_id, 'tail -n 50 ' + _sl.quote(log_path), timeout=15)
+            output = result.get('stdout', '')
+            if output:
+                points = parse_metrics(output, metric_names)
+                new_points = points[seen_count:]
+                for pt in new_points:
+                    METRIC_STORE.add(task_id, pt['metric_name'], pt['value'])
+                seen_count = len(points)
+        except Exception as _pe:
+            import sys
+            print('[_poll_metrics] tail error: ' + str(_pe), file=sys.stderr)
+        try:
+            exit_result = _run_remote(
+                machine_id,
+                'cat ' + _sl.quote(exit_file) + ' 2>/dev/null',
+                timeout=5,
+            )
+            exit_str = exit_result.get('stdout', '').strip()
+            if exit_str.lstrip('-').isdigit():
+                exit_code = int(exit_str)
+                summary = METRIC_STORE.get_task_summary(task_id)
+                final = {k: v['latest'] for k, v in summary.items()} if summary else None
+                on_experiment_complete(task_id, exit_code, final)
+                break
+        except Exception:
+            pass
+
+
 # -- SSH tools (multi-machine extension, Helios remote pattern) --
 
 import subprocess as _sp
@@ -736,6 +778,15 @@ class SshExecBackground(BaseTool):
                 log_path=log_path,
                 metric_names=metric_names if metric_names else [],
             )
+            if metric_names:
+                try:
+                    loop = _asyncio.get_event_loop()
+                    loop.create_task(
+                        _poll_metrics(task_id, machine_id, log_path, metric_names, interval=10)
+                    )
+                    out['poller'] = 'started (10s interval)'
+                except Exception as _le:
+                    out['poller'] = 'skipped: ' + str(_le)
             return json.dumps(out)
         except Exception as e:
             return json.dumps({'error': str(e)})
