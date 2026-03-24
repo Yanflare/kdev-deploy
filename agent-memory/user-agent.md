@@ -8,7 +8,7 @@
 - Always read code before editing — no guessing at structure
 - Tasks should be broken down and completed one at a time without chaining multiple actions unprompted
 - Avoid complex actions without explicit instructions
-- The `/memory` command currently opens files with an editor but does not specify which editor. Users can set their preferred editor via environment variables.
+- The `/memory` command currently opens files with an editor but does not specify which editor. Users can set their preferred editor via the `EDITOR` environment variable.
 
 ## Known Platform Issues (Linux)
 - /memory command: os.startfile() is Windows-only — avoid
