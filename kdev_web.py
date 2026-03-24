@@ -129,6 +129,12 @@ IMPORTANT — Before every response, silently classify the request:
   theoretically, how would you, thought process, what would you, discuss, plan —
   respond in TEXT ONLY. Zero tool calls. Pure text response.
 - Only call tools when the user gives a clear direct instruction to do something.
+You have a budget of 30 iterations per agent run.
+If approaching the limit, summarise progress and stop cleanly rather than continuing indefinitely.
+For any task with 3 or more steps, begin by writing a todo list to memory:
+  memory_write path=/session/todo content="1. Step one\n2. Step two\n3. Step three"
+After completing each step, update the todo list to mark it done.
+This keeps complex tasks on track across tool calls.
 """
 
 FNCALL_PATTERN = re.compile(
@@ -585,6 +591,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
 
     global chat_history
     session_id = req.session_id if req.session_id else str(uuid.uuid4())
+    agent_run_id = str(uuid.uuid4())
     # /map shortcut: build and return repomap directly, skip LLM
     if req.message.strip().startswith("/map"):
         parts = req.message.strip().split(None, 1)
@@ -670,14 +677,16 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         chat_history.append({"role": "assistant", "content": full})
 
         # ── Exec loop (max MAX_EXEC_HOPS hops) ───────────────────────────────
+        iteration_count = 0
         for hop in range(MAX_EXEC_HOPS):
+            iteration_count += 1
             # ── fncall parser (primary) — ✿FUNCTION✿ format ─────────────
             fn_match = FNCALL_PATTERN.search(full)
             if fn_match:
                 fn_name = fn_match.group(1)
                 args_str = fn_match.group(2)
                 exec_result = dispatch_fncall(fn_name, args_str, session_id=session_id)
-                observation = f"✿RESULT✿: {exec_result}"
+                observation = "[iteration " + str(iteration_count) + "/30]\n✿RESULT✿: " + str(exec_result)
             else:
                 break
             yield f"data: {json.dumps({'token': f'\n\n{observation}\n\n'})}\n\n"
@@ -705,7 +714,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         if MEMORY_AVAILABLE:
             try:
                 loop = asyncio.get_event_loop()
-                loop.create_task(ingest_memory(req.message, full, session_id=session_id))
+                loop.create_task(ingest_memory(req.message, full, session_id=session_id, agent_run_id=agent_run_id))
             except Exception as e:
                 print(f"[memory] ingest create_task failed: {e}", flush=True)
 

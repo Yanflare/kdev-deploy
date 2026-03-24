@@ -438,7 +438,7 @@ def _ollama(prompt: str, expect_json: bool = False) -> str:
 
 # ── IngestAgent ───────────────────────────────────────────────────────────────
 
-async def ingest_memory(user_msg: str, assistant_response: str, session_id: str = "") -> None:
+async def ingest_memory(user_msg: str, assistant_response: str, session_id: str = "", agent_run_id: str = "") -> None:
     """
     Called after every KDEV response via asyncio.create_task().
     Extracts structured memory from the exchange and stores it.
