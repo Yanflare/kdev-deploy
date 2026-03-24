@@ -270,6 +270,9 @@ def run_planning(safe_zone_content: str, past_log: str) -> str:
     - Each task must only touch files in the safe zone listed above.
     - Each task must be small enough to complete in one focused edit.
     - Do not propose the same change that appears in past sessions.
+    - STRONGLY PREFER creating new skill files in ~/.kdev/skills/ over editing agent-memory files.
+    - Only propose editing agent-memory files if you have a genuinely new, specific improvement.
+    - When creating a skill, choose a topic NOT already in the skill inventory above.
     - Output ONLY the SESSION_PLAN.md content. No preamble, no explanation.
     """).strip()
 
