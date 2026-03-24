@@ -561,6 +561,23 @@ def dispatch_fncall(fn_name: str, args_str: str, session_id: str = 'default') ->
         return json.dumps({'returncode': -1, 'output': f'Tool dispatch error: {e}'})
 
 
+def prune_history(messages: list, max_chars: int = 80000) -> list:
+    """Drop old tool results when history exceeds max_chars.
+    Always keeps the most recent 5 tool results and all user/assistant turns.
+    The global chat_history is never modified -- only the copy sent to the LLM.
+    """
+    total = sum(len(str(m.get("content", ""))) for m in messages)
+    if total <= max_chars:
+        return messages
+    tool_indices = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
+    keep_last = 5
+    drop_set = set(tool_indices[:max(0, len(tool_indices) - keep_last)])
+    pruned = [m for i, m in enumerate(messages) if i not in drop_set]
+    dropped_chars = total - sum(len(str(m.get("content", ""))) for m in pruned)
+    print(f"[prune] history {total} chars -> {total - dropped_chars} chars"
+          f" (dropped {len(drop_set)} tool results)")
+    return pruned
+
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(default=None)):
     if not check_auth(kdev_session):
@@ -618,7 +635,8 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             if repomap:
                 map_block = f"## Repo map: {map_path}\n\n```\n{repomap}\n```"
                 system = system.rstrip() + "\n\n" + map_block
-        return [{"role": "system", "content": system}] + chat_history
+        history_for_llm = prune_history(chat_history)
+        return [{"role": "system", "content": system}] + history_for_llm
 
     async def stream():
         global chat_history
