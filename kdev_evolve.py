@@ -320,6 +320,30 @@ def run_task(task: dict, task_num: int, session_dt: str) -> str:
     - Output ONLY the file content(s). No explanation, no markdown fences.
     - Keep changes minimal and focused on the task description.
     - Do not touch any file not listed in "Files" above.
+    ## SKILL FILE QUALITY RULES (mandatory):
+    - NEVER invent modules, functions, or tool names that do not exist in KDEV.
+    - NEVER write a skill whose content is just a description of a feature to build.
+    - NEVER reference mcp_toolkit, nautilus, or any external system not in KDEV tool registry.
+    - EVERY skill must contain at least ONE concrete example using a real KDEV tool:
+      shell_exec, file_read, file_write, web_search, show_metrics, compare_runs,
+      memory_ls, memory_read, memory_write, ssh_exec, ssh_exec_background, ssh_tail,
+      experiment_status.
+    - Skills must be specific to KDEV architecture. Generic tips are NOT skills.
+    ## SKILL FILE FORMAT (required structure):
+    ---
+    title: [short descriptive title]
+    tags: [2-4 relevant tags]
+    complexity: [low|medium|high]
+    summary: [one sentence: what problem this skill solves]
+    ---
+    ## When to use
+    [1-3 sentences: exact situation where this skill applies]
+    ## Approach
+    [2-5 sentences: concrete strategy referencing real KDEV tools by name]
+    ## Example
+    [A real working example using actual KDEV tool calls or shell commands]
+    ## Pitfalls
+    [1-3 specific failure modes based on known KDEV behaviour]
     """).strip()
 
     log(f"  Phase B Task {task_num}: Asking 14b to implement '{task['title']}'...")
@@ -359,23 +383,56 @@ def resolve_path(token: str) -> str:
 
 # ── Verification gate ─────────────────────────────────────────────────────────
 
-def verify_task(written_files: list[tuple[str, str]]) -> tuple[bool, str]:
-    """
-    Gate 1: py_compile on any .py files written (should be none, but safety net).
-    Gate 2: smoke test (kdev_memory import + get_memory_stats).
-    Returns (ok, reason).
-    """
-    for abs_path, _ in written_files:
-        ok, err = py_compile_check(abs_path)
-        if not ok:
-            return False, f"py_compile failed on {abs_path}: {err}"
+KDEV_REAL_TOOLS = [
+    "shell_exec", "file_read", "file_write", "web_search",
+    "show_metrics", "compare_runs", "memory_ls", "memory_read",
+    "memory_write", "ssh_exec", "ssh_exec_background", "ssh_tail",
+    "experiment_status",
+]
 
-    ok, msg = smoke_test()
-    if not ok:
-        return False, f"Smoke test failed: {msg}"
+BOILERPLATE_PHRASES = [
+    "mcp_toolkit", "nautilus", "is_available()",
+    "import mcp_", "adjust according to", "actual implementation",
+    "should be adjusted", "facilitating targeted", "key features:",
+    "enhanced data analysis",
+]
 
+def quality_gate_skill(abs_path: str, content: str) -> tuple[bool, str]:
+    """Reject skill files that are boilerplate or hallucinated."""
+    if not abs_path.endswith(".md"):
+        return True, "ok"
+    if ".kdev/skills" not in abs_path and "skills/" not in abs_path:
+        return True, "ok"
+    if len(content.strip()) < 400:
+        return False, "Skill too short -- likely boilerplate"
+    has_tool = any(tool in content for tool in KDEV_REAL_TOOLS)
+    has_shell = any(kw in content for kw in ["```bash", "```python", "shell_exec"])
+    if not has_tool and not has_shell:
+        return False, "Skill has no real KDEV tool reference or code example"
+    content_lower = content.lower()
+    for phrase in BOILERPLATE_PHRASES:
+        if phrase.lower() in content_lower:
+            return False, "Skill contains boilerplate phrase: " + phrase
     return True, "ok"
 
+def verify_task(written_files: list[tuple[str, str]]) -> tuple[bool, str]:
+    """
+    Gate 1: skill quality check on .md skill files.
+    Gate 2: py_compile on any .py files written.
+    Gate 3: smoke test.
+    Returns (ok, reason).
+    """
+    for abs_path, content in written_files:
+        ok, err = quality_gate_skill(abs_path, content)
+        if not ok:
+            return False, "Skill quality gate failed: " + err
+        ok, err = py_compile_check(abs_path)
+        if not ok:
+            return False, "py_compile failed on " + abs_path + ": " + err
+    ok, msg = smoke_test()
+    if not ok:
+        return False, "Smoke test failed: " + msg
+    return True, "ok"
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 def main():
