@@ -255,6 +255,14 @@ function addBubble(text,cls){
   chat.scrollTop=chat.scrollHeight;
   return b;
 }
+const SESSION_ID=(()=>{
+  const id='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{
+    const r=Math.random()*16|0;
+    return(c==='x'?r:(r&0x3|0x8)).toString(16);
+  });
+  console.log('[kdev] session_id='+id);
+  return id;
+})();
 async function sendMsg(){
   const text=msgEl.value.trim();
   if(!text)return;
@@ -263,7 +271,7 @@ async function sendMsg(){
   addBubble(text,'user');
   const bubble=addBubble('','assistant');
   try{
-    const resp=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+    const resp=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,session_id:SESSION_ID})});
     const reader=resp.body.getReader();
     const decoder=new TextDecoder();
     let buf='',done=false;
@@ -510,6 +518,7 @@ async def logout(kdev_session: str | None = Cookie(default=None)):
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: str = ""
 
 SEARXNG_URL = "http://localhost:4000/search"
 
@@ -558,7 +567,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         return Response("Unauthorized", status_code=401)
 
     global chat_history
-    session_id = str(uuid.uuid4())  # unique per conversation
+    session_id = req.session_id if req.session_id else str(uuid.uuid4())
     # /map shortcut: build and return repomap directly, skip LLM
     if req.message.strip().startswith("/map"):
         parts = req.message.strip().split(None, 1)
