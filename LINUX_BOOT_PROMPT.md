@@ -66,18 +66,21 @@ Injected into every session's system prompt. Edit freely to add context about th
 
 ---
 
-## What Still Needs To Be Done
+## Verifying Ollama Backend Configuration After Booting
 
-### Immediate (first boot):
-1. **Configure `.env`** with Ollama settings (see MIGRATION_CHECKLIST.md §2)
-   - Set the following environment variables in your `.env` file:
-     ```
-     OLLAMA_BASE_URL=https://your-ollama-base-url
-     OLLAMA_MODEL=qwen2.5-abliterate:14b-instruct-q4_K_M
-     EDITOR=vim  # or your preferred editor
-     ```
-   - Example command to set `EDITOR`:
-     ```bash
-     export EDITOR=vim
+To ensure the Ollama backend is correctly configured after booting on Linux, follow these steps:
 
-... [truncated]
+1. Open a terminal.
+2. Run the following commands to check if the required environment variables are set:
+   ```bash
+   echo $OLLAMA_BASE_URL
+   echo $OLLAMA_MODEL
+   ```
+3. If the output shows the correct values (e.g., `https://your-ollama-base-url` and `qwen2.5-abliterate:14b-instruct-q4_K_M`), your Ollama backend is configured correctly.
+4. If any of the commands return an empty value, you need to set or verify the environment variables in your `.env` file located at `/home/yanflare/.kdev/.env`.
+5. After setting or verifying the values, restart `kdev.py`:
+   ```bash
+   python3 kdev.py
+   ```
+
+By following these steps, you can ensure that your Ollama backend configuration is correctly set up before using `kdev`.
