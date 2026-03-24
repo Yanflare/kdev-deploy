@@ -217,7 +217,7 @@ body{background:#0a1a1a;color:#00ffcc;font-family:'Courier New',monospace;height
 #header{padding:16px 20px;border-bottom:1px solid #00ffcc33;display:flex;justify-content:space-between;align-items:center}
 #header h1{font-size:1.4em;letter-spacing:3px}
 #header p{color:#006655;font-size:.8em}
-#chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;min-height:0}
+#chat{flex:1;overflow-y:scroll;padding:20px;display:flex;flex-direction:column;gap:16px;min-height:0;scrollbar-width:thin;scrollbar-color:#00ffcc44 #001a11}
 .bubble{max-width:85%;padding:10px 16px;border-radius:12px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
 .user{align-self:flex-end;background:#00ffcc22;border:1px solid #00ffcc55;color:#00ffcc}
 .assistant{align-self:flex-start;background:#003322;border:1px solid #00664433;color:#aaffcc;min-width:60px;min-height:24px;max-height:400px;overflow-y:auto}
