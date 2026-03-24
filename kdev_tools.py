@@ -213,10 +213,19 @@ def _metric_db():
 
 class MetricStore:
     def add(self, task_id: str, metric_name: str, value: float) -> None:
+        now_ms = int(_mtime.time() * 1000)
+        window_ms = 30 * 1000
         db = _metric_db()
+        dup = db.execute(
+            'SELECT 1 FROM metric_points WHERE task_id=? AND metric_name=? AND value=? AND ts >= ? LIMIT 1',
+            (task_id, metric_name, value, now_ms - window_ms)
+        ).fetchone()
+        if dup:
+            db.close()
+            return
         db.execute(
             'INSERT INTO metric_points (task_id, metric_name, value, ts) VALUES (?,?,?,?)',
-            (task_id, metric_name, value, int(_mtime.time() * 1000))
+            (task_id, metric_name, value, now_ms)
         )
         db.commit()
         db.close()
