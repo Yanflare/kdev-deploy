@@ -8,7 +8,7 @@
 - Break down complex tasks into smaller steps
 - Break tasks into single actions without chaining unprompted
 - Avoid complex actions without explicit instructions
-
+- Auto-save sessions every 15 minutes to enhance user experience
 
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
