@@ -739,6 +739,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
 
         # ── Exec loop (max MAX_EXEC_HOPS hops) ───────────────────────────────
         iteration_count = 0
+        _tool_timings = []
         for hop in range(MAX_EXEC_HOPS):
             iteration_count += 1
             # ── fncall parser (primary) — ✿FUNCTION✿ format ─────────────
@@ -746,9 +747,14 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             if fn_match:
                 fn_name = fn_match.group(1)
                 args_str = fn_match.group(2)
+                import time as _ttime
+                _t0 = _ttime.perf_counter()
                 exec_result = dispatch_fncall(fn_name, args_str, session_id=session_id)
+                _t1 = _ttime.perf_counter()
+                _dur_ms = round((_t1 - _t0) * 1000)
                 _tier = TOOL_TIER.get(fn_name, 'unknown')
-                print(f"[tool] {fn_name} [{_tier}] args={args_str[:120]}", flush=True)
+                print('[tool] ' + fn_name + ' [' + _tier + '] ' + str(_dur_ms) + 'ms args=' + args_str[:120], flush=True)
+                _tool_timings.append({'tool': fn_name, 'tier': _tier, 'duration_ms': _dur_ms})
                 observation = "[iteration " + str(iteration_count) + "/30]\n✿RESULT✿: " + str(exec_result)
             else:
                 break
@@ -790,6 +796,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 'agent_run_id': agent_run_id,
                 'tool_calls': iteration_count,
                 'hops': hop + 1,
+                'tool_timings': _tool_timings,
             })
             _elog = Path('/home/yanflare/.kdev/events.jsonl')
             with open(_elog, 'a', encoding='utf-8') as _ef:
