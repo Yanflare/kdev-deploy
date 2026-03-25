@@ -3,7 +3,7 @@ kdev_web.py — KDEV web UI with login protection, direct Ollama streaming.
 Phase 1: Simple and reliable. MCP tools added in Phase 2.
 """
 import asyncio
-import hashlib, json, re, subprocess, sys, uuid
+import hashlib, json, os, re, subprocess, sys, uuid
 import requests
 from pathlib import Path
 import httpx
@@ -113,6 +113,44 @@ def build_repomap(project_path: str, max_files: int = 80) -> str:
     print(f"[repomap] cached {len(py_files)} files → {cache_file}", flush=True)
     return result
 
+_FILE_CACHE_STR = ""
+_FILE_CACHE_MTIME = 0.0
+
+def build_file_cache(root="/home/yanflare/kdev-deploy", max_depth=2):
+    global _FILE_CACHE_STR, _FILE_CACHE_MTIME
+    try:
+        newest = 0.0
+        entries = []
+        root_path = root.rstrip("/")
+        for dirpath, dirnames, filenames in os.walk(root_path):
+            dirnames[:] = [d for d in sorted(dirnames) if not d.startswith(".") and d != "__pycache__"]
+            depth = dirpath[len(root_path):].count(os.sep)
+            if depth >= max_depth:
+                dirnames[:] = []
+                continue
+            rel = dirpath[len(root_path):].lstrip("/") or "."
+            for fname in sorted(filenames):
+                if fname.startswith("."):
+                    continue
+                fpath = os.path.join(dirpath, fname)
+                try:
+                    mt = os.path.getmtime(fpath)
+                    if mt > newest:
+                        newest = mt
+                except OSError:
+                    pass
+                entry = fname if rel == "." else rel + "/" + fname
+                entries.append(entry)
+        if newest == _FILE_CACHE_MTIME and _FILE_CACHE_STR:
+            return _FILE_CACHE_STR
+        _FILE_CACHE_MTIME = newest
+        _FILE_CACHE_STR = "Project files (" + root + "):\n" + "\n".join(entries)
+        print("[file-cache] rebuilt " + str(len(entries)) + " entries", flush=True)
+        return _FILE_CACHE_STR
+    except Exception as e:
+        print("[file-cache] error: " + str(e), flush=True)
+        return ""
+
 SYSTEM_PROMPT = """You are kdev — a coding and systems assistant running on a Linux host.
 
 You have access to tools. Use the tool calling format defined in the Tools section below.
@@ -136,6 +174,7 @@ For any task with 3 or more steps, begin by writing a todo list to memory:
 After completing each step, update the todo list to mark it done.
 This keeps complex tasks on track across tool calls.
 """
+SYSTEM_PROMPT = SYSTEM_PROMPT.rstrip() + "\n\n" + build_file_cache() + "\n"
 
 FNCALL_PATTERN = re.compile(
     r'✿FUNCTION✿:\s*(\w+)\s*\n✿ARGS✿:\s*(\{.*?\})', re.DOTALL
