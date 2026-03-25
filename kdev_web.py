@@ -617,12 +617,29 @@ TOOLS_SCHEMA = build_tools_system_prompt()
 SYSTEM_PROMPT = SYSTEM_PROMPT + TOOLS_SCHEMA
 
 
+# ── Credential redaction ─────────────────────────────────────────────────────
+import re as _re
+_REDACT_PATTERNS = [
+    _re.compile(r'sk-[A-Za-z0-9]{20,}'),
+    _re.compile(r'Bearer [A-Za-z0-9\-._~+/]{20,}'),
+    _re.compile(r'(?m)^[A-Z_]*(PASSWORD|API_KEY|SECRET|TOKEN)[A-Z_]*=.+$'),
+    _re.compile(r'(?:[A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])'),
+]
+
+def redact_output(text: str) -> str:
+    """Replace credential-like patterns with [REDACTED]."""
+    for pat in _REDACT_PATTERNS:
+        text = pat.sub('[REDACTED]', text)
+    return text
+
+
 def dispatch_fncall(fn_name: str, args_str: str, session_id: str = 'default') -> str:
     """Dispatch a ✿FUNCTION✿ call to the KDEV tool registry."""
     if fn_name not in KDEV_TOOL_REGISTRY:
         return json.dumps({'returncode': -1, 'output': f'Unknown tool: {fn_name}. Available: {list(KDEV_TOOL_REGISTRY.keys())}'})
     try:
         result = KDEV_TOOL_REGISTRY[fn_name]().call(args_str, session_id=session_id)
+        result = redact_output(str(result))
         return result
     except Exception as e:
         return json.dumps({'returncode': -1, 'output': f'Tool dispatch error: {e}'})
@@ -838,7 +855,8 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 _tier = TOOL_TIER.get(fn_name, 'unknown')
                 print('[tool] ' + fn_name + ' [' + _tier + '] ' + str(_dur_ms) + 'ms args=' + args_str[:120], flush=True)
                 _tool_timings.append({'tool': fn_name, 'tier': _tier, 'duration_ms': _dur_ms})
-                observation = "[iteration " + str(iteration_count) + "/30]\n✿RESULT✿: " + str(exec_result)
+                _safe_exec_result = str(exec_result).replace('\u273fFUNCTION\u273f', '[FUNCTION]').replace('\u273fARGS\u273f', '[ARGS]').replace('\u273fRESULT\u273f', '[RESULT]')
+                observation = "[iteration " + str(iteration_count) + "/30]\n✿RESULT✿: " + _safe_exec_result
             else:
                 break
             yield f"data: {json.dumps({'token': f'\n\n{observation}\n\n'})}\n\n"
