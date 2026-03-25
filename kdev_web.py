@@ -670,6 +670,61 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             yield "data: [DONE]\n\n"
         from starlette.responses import StreamingResponse as _SR
         return _SR(map_stream(), media_type="text/event-stream")
+    if req.message.strip().lower().startswith('/events'):
+        import json as _ejson
+        import os as _eos
+        import datetime as _edt
+        _eparts = req.message.strip().split(None, 1)
+        try:
+            _en = int(_eparts[1].strip()) if len(_eparts) > 1 else 20
+        except (ValueError, IndexError):
+            _en = 20
+        _en = max(1, min(_en, 200))
+        _epath = _eos.path.expanduser('~/.kdev/events.jsonl')
+        _erows = []
+        try:
+            with open(_epath, 'r', encoding='utf-8') as _ef:
+                for _eline in _ef:
+                    _eline = _eline.strip()
+                    if _eline:
+                        try:
+                            _erows.append(_ejson.loads(_eline))
+                        except Exception:
+                            pass
+        except FileNotFoundError:
+            _erows = []
+        _erows = _erows[-_en:]
+        _eout = []
+        if not _erows:
+            _eout.append('No events logged yet.')
+        else:
+            _eout.append('## Last ' + str(len(_erows)) + ' agent runs')
+            _eout.append('')
+            _eout.append('| # | Time | Session | Run ID | Hops | Tools | Slowest tool |')
+            _eout.append('|---|------|---------|--------|------|-------|--------------|')
+            for _ei, _ev in enumerate(_erows, 1):
+                _ets = _ev.get('ts', 0)
+                _edt_str = _edt.datetime.fromtimestamp(_ets).strftime('%m-%d %H:%M:%S') if _ets else '?'
+                _esid = _ev.get('session_id', '?')[:8]
+                _erid = _ev.get('agent_run_id', '?')[:8]
+                _ehops = str(_ev.get('hops', '?'))
+                _etool_calls = str(_ev.get('tool_calls', '?'))
+                _etimings = _ev.get('tool_timings', [])
+                if _etimings:
+                    _eslowest = max(_etimings, key=lambda x: x.get('duration_ms', 0))
+                    _eslow_str = _eslowest.get('tool', '?') + ' ' + str(_eslowest.get('duration_ms', '?')) + 'ms'
+                else:
+                    _eslow_str = '-'
+                _eout.append('| ' + str(_ei) + ' | ' + _edt_str + ' | ' + _esid + ' | ' + _erid + ' | ' + _ehops + ' | ' + _etool_calls + ' | ' + _eslow_str + ' |')
+        _eresponse = chr(10).join(_eout)
+        chat_history.append({'role': 'user', 'content': req.message})
+        chat_history.append({'role': 'assistant', 'content': _eresponse})
+        async def _events_stream():
+            yield 'data: ' + _ejson.dumps({'token': _eresponse}) + chr(10) + chr(10)
+            yield 'data: [DONE]' + chr(10) + chr(10)
+        from starlette.responses import StreamingResponse as _ESR
+        return _ESR(_events_stream(), media_type='text/event-stream')
+
     if req.message.strip().lower().startswith("/web-search"):
         query = req.message.strip()[len("/web-search"):].strip()
         if not query:
