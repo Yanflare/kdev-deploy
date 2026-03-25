@@ -901,6 +901,124 @@ class ExperimentStatus(BaseTool):
             return json.dumps({'error': str(e)})
 
 
+
+
+# -- 16. browser_nav ---------------------------------------------------------
+
+PINCHTAB_URL = 'http://localhost:9867'
+_pinchtab_headers = {
+    'Authorization': 'Bearer kdev-browser',
+    'Content-Type': 'application/json',
+}
+
+
+def _pinchtab_default_instance():
+    """Return the first running PinchTab instance id, or raise."""
+    r = requests.get(
+        f'{PINCHTAB_URL}/instances',
+        headers=_pinchtab_headers,
+        timeout=10,
+    )
+    r.raise_for_status()
+    instances = r.json()
+    if isinstance(instances, list):
+        for inst in instances:
+            if inst.get('status') == 'running':
+                return inst['id']
+    raise RuntimeError('No running PinchTab instance found')
+
+
+@register_tool('browser_nav')
+class BrowserNav(BaseTool):
+    description = (
+        'Open a new browser tab and navigate it to a URL using PinchTab headless Chrome. '
+        'Returns instance_id and tab_id needed for browser_snap. '
+        'Use for web research, reading live pages, and browser automation.'
+    )
+    parameters = [
+        {'name': 'url', 'type': 'string',
+         'description': 'Full URL to navigate to (must include https://).', 'required': True},
+        {'name': 'instance_id', 'type': 'string',
+         'description': 'PinchTab instance ID. Omit to use the default running instance.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            url = p['url']
+            instance_id = p.get('instance_id') or None
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            if not instance_id:
+                instance_id = _pinchtab_default_instance()
+            # Step 1: open a new tab
+            r1 = requests.post(
+                f'{PINCHTAB_URL}/instances/{instance_id}/tabs/open',
+                headers=_pinchtab_headers,
+                json={},
+                timeout=15,
+            )
+            r1.raise_for_status()
+            tab_data = r1.json()
+            tab_id = tab_data.get('id') or tab_data.get('tabId') or tab_data.get('tab_id', '')
+            if not tab_id:
+                return json.dumps({'error': 'tab open returned no tab id', 'raw': tab_data})
+            # Step 2: navigate the tab
+            r2 = requests.post(
+                f'{PINCHTAB_URL}/tabs/{tab_id}/navigate',
+                headers=_pinchtab_headers,
+                json={'url': url},
+                timeout=30,
+            )
+            r2.raise_for_status()
+            return json.dumps({'ok': True, 'instance_id': instance_id, 'tab_id': tab_id, 'url': url})
+        except Exception as e:
+            return json.dumps({'ok': False, 'error': str(e)})
+
+
+# -- 17. browser_snap ---------------------------------------------------------
+
+@register_tool('browser_snap')
+class BrowserSnap(BaseTool):
+    description = (
+        'Take a text snapshot of a browser tab using PinchTab. '
+        'Returns page structure and interactive elements (~800 tokens, very efficient). '
+        'Always call browser_nav first to get instance_id and tab_id.'
+    )
+    parameters = [
+        {'name': 'tab_id', 'type': 'string',
+         'description': 'Tab ID returned by browser_nav.', 'required': True},
+        {'name': 'filter', 'type': 'string',
+         'description': 'Snapshot filter: "interactive" for clickable elements only. Omit for full page.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            tab_id = p['tab_id']
+            snap_filter = p.get('filter', '')
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            qparams = {}
+            if snap_filter:
+                qparams['filter'] = snap_filter
+            r = requests.get(
+                f'{PINCHTAB_URL}/tabs/{tab_id}/snapshot',
+                headers=_pinchtab_headers,
+                params=qparams,
+                timeout=30,
+            )
+            r.raise_for_status()
+            content = r.text
+            if len(content) > 6000:
+                content = content[:6000] + '...[truncated]'
+            return content
+        except Exception as e:
+            return json.dumps({'error': str(e)})
+
+
 # -- 15. grep_files ------------------------------------------------------------
 @register_tool('grep_files')
 class GrepFiles(BaseTool):
@@ -1016,7 +1134,7 @@ class GrepFiles(BaseTool):
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
               'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
               'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status',
-              'grep_files']
+              'grep_files', 'browser_nav', 'browser_snap']
 
 
 def build_tools_system_prompt() -> str:
