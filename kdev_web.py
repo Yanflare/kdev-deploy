@@ -173,6 +173,10 @@ For any task with 3 or more steps, begin by writing a todo list to memory:
   memory_write path=/session/todo content="1. Step one\n2. Step two\n3. Step three"
 After completing each step, update the todo list to mark it done.
 This keeps complex tasks on track across tool calls.
+When writing temporary files, always use /tmp/kdev_<descriptive_name>.<ext> naming.
+Never write Markdown (.md) as intermediate scratch files — use .txt or .py.
+After completing a multi-step task, end your final response with:
+"Next step: <one sentence describing what logically follows, or Task complete."
 """
 SYSTEM_PROMPT = SYSTEM_PROMPT.rstrip() + "\n\n" + build_file_cache() + "\n"
 
