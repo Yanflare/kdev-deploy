@@ -43,6 +43,24 @@ chat_history = []
 valid_sessions: set = set()
 MAX_EXEC_HOPS = 3
 
+# ── Tool permission tiers ────────────────────────────────────────────────────
+TOOL_TIER = {
+    'shell_exec':            'destructive',
+    'ssh_exec':              'destructive',
+    'ssh_exec_background':   'destructive',
+    'file_write':            'write',
+    'skill_save':            'write',
+    'memory_write':          'write',
+    'file_read':             'read-only',
+    'web_search':            'read-only',
+    'show_metrics':          'read-only',
+    'compare_runs':          'read-only',
+    'memory_ls':             'read-only',
+    'memory_read':           'read-only',
+    'ssh_tail':              'read-only',
+    'experiment_status':     'read-only',
+}
+
 
 import ast as _ast
 import hashlib as _hashlib
@@ -729,6 +747,8 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 fn_name = fn_match.group(1)
                 args_str = fn_match.group(2)
                 exec_result = dispatch_fncall(fn_name, args_str, session_id=session_id)
+                _tier = TOOL_TIER.get(fn_name, 'unknown')
+                print(f"[tool] {fn_name} [{_tier}] args={args_str[:120]}", flush=True)
                 observation = "[iteration " + str(iteration_count) + "/30]\n✿RESULT✿: " + str(exec_result)
             else:
                 break
