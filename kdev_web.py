@@ -781,6 +781,21 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             except Exception as e:
                 print(f"[memory] ingest create_task failed: {e}", flush=True)
 
+        # -- JSONL event log --------------------------------------------------
+        try:
+            import time as _time
+            _event = json.dumps({
+                'ts': _time.time(),
+                'session_id': session_id,
+                'agent_run_id': agent_run_id,
+                'tool_calls': iteration_count,
+                'hops': hop + 1,
+            })
+            _elog = Path('/home/yanflare/.kdev/events.jsonl')
+            with open(_elog, 'a', encoding='utf-8') as _ef:
+                _ef.write(_event + '\n')
+        except Exception as _elog_err:
+            print('[event-log] failed: ' + str(_elog_err), flush=True)
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
