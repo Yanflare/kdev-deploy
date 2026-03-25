@@ -900,9 +900,123 @@ class ExperimentStatus(BaseTool):
         except Exception as e:
             return json.dumps({'error': str(e)})
 
+
+# -- 15. grep_files ------------------------------------------------------------
+@register_tool('grep_files')
+class GrepFiles(BaseTool):
+    description = (
+        'Search for a regex pattern across files in a directory. '
+        'Uses ripgrep (rg) if available, falls back to pure Python. '
+        'Returns matched file paths, line numbers, and line content.'
+    )
+    parameters = [
+        {'name': 'pattern', 'type': 'string',
+         'description': 'Regex pattern to search for.', 'required': True},
+        {'name': 'path', 'type': 'string',
+         'description': 'Directory or file path to search in.', 'required': True},
+        {'name': 'file_glob', 'type': 'string',
+         'description': 'File glob filter e.g. "*.py" (optional, rg only).', 'required': False},
+        {'name': 'max_results', 'type': 'integer',
+         'description': 'Maximum number of matches to return (default 50).', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        import shutil
+        import re as _re
+        try:
+            args = json.loads(params)
+            pattern = args['pattern']
+            path = args['path']
+            file_glob = args.get('file_glob', '')
+            max_results = int(args.get('max_results', 50))
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+
+        if shutil.which('rg'):
+            return self._rg(pattern, path, file_glob, max_results)
+        else:
+            return self._python_fallback(pattern, path, max_results)
+
+    def _rg(self, pattern, path, file_glob, max_results):
+        cmd = ['rg', '--json', '--max-count', '1', pattern, path]
+        if file_glob:
+            cmd += ['--glob', file_glob]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            return json.dumps({'error': 'TIMEOUT: rg exceeded 30s'})
+        except Exception as e:
+            return json.dumps({'error': f'EXEC_ERROR: {e}'})
+
+        matches = []
+        for line in result.stdout.splitlines():
+            if len(matches) >= max_results:
+                break
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if obj.get('type') != 'match':
+                continue
+            data = obj.get('data', {})
+            fpath = data.get('path', {}).get('text', '')
+            lineno = data.get('line_number', 0)
+            text = data.get('lines', {}).get('text', '').rstrip(chr(10))
+            matches.append({'file': fpath, 'line': lineno, 'text': text})
+
+        return json.dumps({
+            'engine': 'ripgrep',
+            'pattern': pattern,
+            'path': path,
+            'match_count': len(matches),
+            'matches': matches
+        })
+
+    def _python_fallback(self, pattern, path, max_results):
+        import os
+        import re as _re
+        matches = []
+        try:
+            compiled = _re.compile(pattern)
+        except Exception as e:
+            return json.dumps({'error': f'REGEX_ERROR: {e}'})
+
+        if os.path.isfile(path):
+            walk_targets = [(os.path.dirname(path), [], [os.path.basename(path)])]
+        else:
+            walk_targets = os.walk(path)
+
+        for dirpath, dirnames, filenames in walk_targets:
+            dirnames[:] = [d for d in dirnames if not d.startswith('.') and d != '__pycache__']
+            for fname in filenames:
+                if len(matches) >= max_results:
+                    break
+                fpath = os.path.join(dirpath, fname)
+                try:
+                    with open(fpath, 'r', errors='replace') as f:
+                        for lineno, text in enumerate(f, 1):
+                            if compiled.search(text):
+                                matches.append({
+                                    'file': fpath,
+                                    'line': lineno,
+                                    'text': text.rstrip(chr(10))
+                                })
+                                if len(matches) >= max_results:
+                                    break
+                except Exception:
+                    continue
+
+        return json.dumps({
+            'engine': 'python_fallback',
+            'pattern': pattern,
+            'path': path,
+            'match_count': len(matches),
+            'matches': matches
+        })
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
               'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
-              'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status']
+              'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status',
+              'grep_files']
 
 
 def build_tools_system_prompt() -> str:
