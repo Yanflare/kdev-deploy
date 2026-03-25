@@ -725,6 +725,34 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         from starlette.responses import StreamingResponse as _ESR
         return _ESR(_events_stream(), media_type='text/event-stream')
 
+    if req.message.strip().lower().startswith('/evolve-log'):
+        import os as _elos
+        import json as _eljson
+        _elparts = req.message.strip().split(None, 1)
+        try:
+            _eln = int(_elparts[1].strip()) if len(_elparts) > 1 else 60
+        except (ValueError, IndexError):
+            _eln = 60
+        _eln = max(1, min(_eln, 500))
+        _elpath = _elos.path.expanduser('~/.kdev/evolve-log.md')
+        try:
+            with open(_elpath, 'r', encoding='utf-8') as _elf:
+                _ellines = _elf.readlines()
+            _ellines = _ellines[-_eln:]
+            _eltext = '## evolve-log (last ' + str(len(_ellines)) + ' lines)' + chr(10) + chr(10) + '```' + chr(10) + ''.join(_ellines).rstrip() + chr(10) + '```'
+        except FileNotFoundError:
+            _eltext = 'evolve-log.md not found at ' + _elpath
+        except Exception as _ele:
+            _eltext = 'Error reading evolve-log: ' + str(_ele)
+        chat_history.append({'role': 'user', 'content': req.message})
+        chat_history.append({'role': 'assistant', 'content': _eltext})
+        async def _evolve_log_stream():
+            yield 'data: ' + _eljson.dumps({'token': _eltext}) + chr(10) + chr(10)
+            yield 'data: [DONE]' + chr(10) + chr(10)
+        from starlette.responses import StreamingResponse as _ELSR
+        return _ELSR(_evolve_log_stream(), media_type='text/event-stream')
+
+
     if req.message.strip().lower().startswith("/web-search"):
         query = req.message.strip()[len("/web-search"):].strip()
         if not query:
