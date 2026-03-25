@@ -803,6 +803,28 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 _ef.write(_event + '\n')
         except Exception as _elog_err:
             print('[event-log] failed: ' + str(_elog_err), flush=True)
+
+        # -- Fine-tune data pipeline --------------------------------------
+        try:
+            import time as _ftime
+            _ft_has_tools = iteration_count > 0
+            _ft_long_enough = len(full) > 100
+            _ft_no_error = not full.strip().startswith('Error:')
+            if _ft_has_tools and _ft_long_enough and _ft_no_error:
+                _ft_record = json.dumps({
+                    'messages': [
+                        {'role': 'user', 'content': req.message},
+                        {'role': 'assistant', 'content': full},
+                    ],
+                    'ts': _ftime.time(),
+                    'agent_run_id': agent_run_id,
+                })
+                _ftlog = Path('/home/yanflare/.kdev/finetune.jsonl')
+                with open(_ftlog, 'a', encoding='utf-8') as _ftf:
+                    _ftf.write(_ft_record + '\n')
+                print('[finetune] record saved (' + str(len(full)) + ' chars)', flush=True)
+        except Exception as _ft_err:
+            print('[finetune] failed: ' + str(_ft_err), flush=True)
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
