@@ -47,10 +47,24 @@ class ShellExec(BaseTool):
     ]
 
     def call(self, params: str, **kwargs) -> str:
+        import re as _re
         try:
             cmd = json.loads(params)['cmd']
         except Exception as e:
             return json.dumps({'returncode': -1, 'output': f'ARGS_PARSE_ERROR: {e}'})
+        # T3-I pip call guard — block autonomous pip install/upgrade
+        _PIP_GUARD = _re.compile(
+            r'(?:^|\s|/)pip3?\s+(?:install|install\s+-[^\s]*|install\s+--upgrade)',
+            _re.IGNORECASE
+        )
+        if _PIP_GUARD.search(cmd):
+            return json.dumps({
+                'returncode': -1,
+                'output': (
+                    'BLOCKED: pip install requires human confirmation. '
+                    'Tell the user what you want to install and why.'
+                )
+            })
         try:
             result = subprocess.run(cmd, shell=True, capture_output=True,
                                     text=True, timeout=30)
