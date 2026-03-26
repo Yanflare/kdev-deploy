@@ -1209,6 +1209,52 @@ class GrepFiles(BaseTool):
             'match_count': len(matches),
             'matches': matches
         })
+
+@register_tool('http_request')
+class HttpRequest(BaseTool):
+    name = 'http_request'
+    description = (
+        'Make a raw HTTP request to a local URL. '
+        'Supports GET, POST, PUT, DELETE. '
+        'Returns status code, body (capped 4000 chars), and content-type header.'
+    )
+    parameters = [
+        {'name': 'method',  'type': 'string',  'required': True,  'description': 'HTTP verb: GET POST PUT DELETE'},
+        {'name': 'url',     'type': 'string',  'required': True,  'description': 'Full URL e.g. http://localhost:11434/api/tags'},
+        {'name': 'headers', 'type': 'object',  'required': False, 'description': 'Optional dict of extra request headers'},
+        {'name': 'body',    'type': 'object',  'required': False, 'description': 'Optional JSON-serialisable body for POST/PUT'},
+        {'name': 'timeout', 'type': 'integer', 'required': False, 'description': 'Request timeout in seconds (default 10)'},
+    ]
+
+    def call(self, method='GET', url='', headers=None, body=None, timeout=10):
+        import requests as _req
+        method = str(method).upper()
+        headers = headers or {}
+        try:
+            timeout = int(timeout)
+        except (TypeError, ValueError):
+            timeout = 10
+        if not url:
+            return {'error': 'url is required'}
+        try:
+            resp = _req.request(
+                method,
+                url,
+                headers=headers,
+                json=body if body else None,
+                timeout=timeout,
+            )
+            raw = resp.text
+            if len(raw) > 4000:
+                raw = raw[:4000] + ' ... [truncated]'
+            return {
+                'status': resp.status_code,
+                'body': raw,
+                'content_type': resp.headers.get('Content-Type', ''),
+            }
+        except Exception as exc:
+            return {'error': str(exc)}
+
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
               'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
               'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status',
@@ -1244,7 +1290,7 @@ def build_tools_system_prompt() -> str:
         '✿RESULT✿: <tool output>\n',
         'Then continue your response naturally.',
         'One tool call per turn. Only call tools that exist in the list above.',
-    ]
+              'http_request']
 
     return '\n'.join(lines)
 

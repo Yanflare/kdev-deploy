@@ -59,6 +59,7 @@ TOOL_TIER = {
     'memory_read':           'read-only',
     'ssh_tail':              'read-only',
     'experiment_status':     'read-only',
+    'http_request':           'write',
 }
 
 
