@@ -1255,10 +1255,91 @@ class HttpRequest(BaseTool):
         except Exception as exc:
             return {'error': str(exc)}
 
+
+# -- 20. git_tool (T2-J) --
+# Tier: status/diff/log = read-only  |  commit = write
+
+@register_tool('git_tool')
+class GitTool(BaseTool):
+    description = (
+        'Run git operations in a given repo directory. '
+        'Sub-commands: status, diff, log, commit. '
+        'status and diff are read-only. log is read-only. commit is a write operation.'
+    )
+    parameters = [
+        {'name': 'subcmd',   'type': 'string',  'required': True,
+         'description': 'One of: status | diff | log | commit'},
+        {'name': 'repo',     'type': 'string',  'required': False,
+         'description': 'Absolute path to git repo. Defaults to /home/yanflare/kdev-deploy.'},
+        {'name': 'message',  'type': 'string',  'required': False,
+         'description': 'Commit message — required when subcmd is commit.'},
+        {'name': 'log_n',    'type': 'integer', 'required': False,
+         'description': 'Number of log entries to return (default 10, max 50).'},
+    ]
+
+    _DEFAULT_REPO = '/home/yanflare/kdev-deploy'
+    _ALLOWED = {'status', 'diff', 'log', 'commit'}
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            subcmd  = p.get('subcmd', '').strip().lower()
+            repo    = p.get('repo') or self._DEFAULT_REPO
+            message = p.get('message', '').strip()
+            log_n   = min(int(p.get('log_n', 10)), 50)
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+
+        if subcmd not in self._ALLOWED:
+            return json.dumps({'error': f'Unknown subcmd: {subcmd}. Use: status | diff | log | commit'})
+
+        import subprocess as _sp
+        from pathlib import Path as _P
+
+        repo_path = _P(repo)
+        if not repo_path.is_dir():
+            return json.dumps({'error': f'Repo path not found: {repo}'})
+
+        def _run(cmd_list):
+            try:
+                r = _sp.run(
+                    cmd_list,
+                    cwd=str(repo_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                out = (r.stdout + r.stderr)[:4000]
+                return json.dumps({'returncode': r.returncode, 'output': out})
+            except _sp.TimeoutExpired:
+                return json.dumps({'returncode': -1, 'output': 'TIMEOUT: git exceeded 15s'})
+            except Exception as exc:
+                return json.dumps({'returncode': -1, 'output': f'EXEC_ERROR: {exc}'})
+
+        if subcmd == 'status':
+            return _run(['git', 'status', '--short', '--branch'])
+
+        elif subcmd == 'diff':
+            return _run(['git', 'diff', 'HEAD'])
+
+        elif subcmd == 'log':
+            fmt = '%h %ad %s'
+            return _run(['git', 'log', f'--max-count={log_n}',
+                         '--date=short', f'--pretty=format:{fmt}'])
+
+        elif subcmd == 'commit':
+            if not message:
+                return json.dumps({'error': 'commit requires a message parameter'})
+            _run(['git', 'add', '-A'])
+            return _run(['git', 'commit', '-m', message])
+
+        return json.dumps({'error': 'unreachable'})
+
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
               'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
               'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status',
-              'grep_files', 'browser_nav', 'browser_snap', 'browser_action']
+              'grep_files', 'browser_nav', 'browser_snap', 'browser_action',
+              'http_request', 'git_tool']
 
 
 def build_tools_system_prompt() -> str:
@@ -1290,7 +1371,7 @@ def build_tools_system_prompt() -> str:
         '✿RESULT✿: <tool output>\n',
         'Then continue your response naturally.',
         'One tool call per turn. Only call tools that exist in the list above.',
-              'http_request']
+    ]
 
     return '\n'.join(lines)
 
