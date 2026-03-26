@@ -624,6 +624,9 @@ _REDACT_PATTERNS = [
     _re.compile(r'Bearer [A-Za-z0-9\-._~+/]{20,}'),
     _re.compile(r'(?m)^[A-Z_]*(PASSWORD|API_KEY|SECRET|TOKEN)[A-Z_]*=.+$'),
     _re.compile(r'(?:[A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])'),
+    # T3-H: catch KEY=value inside JSON strings (grep_files output, etc.)
+    # Matches PASSWORD/API_KEY/SECRET/TOKEN = anything up to quote/comma/newline
+    _re.compile(r'[A-Z_]*(PASSWORD|API_KEY|SECRET|TOKEN)[A-Z_]*=[^\s\'"\\,}]{1,}'),
 ]
 
 def redact_output(text: str) -> str:
