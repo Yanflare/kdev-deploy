@@ -1335,11 +1335,69 @@ class GitTool(BaseTool):
 
         return json.dumps({'error': 'unreachable'})
 
+
+
+# -- 21. process_snapshot (T2-K) --
+# Tier: read-only
+# Requires: psutil (already in kdev venv)
+
+@register_tool('process_snapshot')
+class ProcessSnapshot(BaseTool):
+    description = (
+        'Return top-N processes by CPU and memory using psutil. '
+        'Useful for diagnosing Ollama memory pressure or runaway processes. '
+        'Returns two ranked lists: top_cpu and top_mem.'
+    )
+    parameters = [
+        {'name': 'top_n', 'type': 'integer', 'required': False,
+         'description': 'Number of processes to return per list (default 10, max 20).'},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            top_n = min(int(p.get('top_n', 10)), 20)
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            import psutil as _ps
+        except ImportError:
+            return json.dumps({'error': 'psutil not installed in venv'})
+        try:
+            procs = []
+            for proc in _ps.process_iter(
+                ['pid', 'name', 'cpu_percent', 'memory_info', 'status']
+            ):
+                try:
+                    info = proc.info
+                    mem_mb = round(info['memory_info'].rss / 1024 / 1024, 1) if info['memory_info'] else 0
+                    procs.append({
+                        'pid':     info['pid'],
+                        'name':    info['name'],
+                        'cpu':     info['cpu_percent'],
+                        'mem_mb':  mem_mb,
+                        'status':  info['status'],
+                    })
+                except (_ps.NoSuchProcess, _ps.AccessDenied):
+                    continue
+            top_cpu = sorted(procs, key=lambda x: x['cpu'],    reverse=True)[:top_n]
+            top_mem = sorted(procs, key=lambda x: x['mem_mb'], reverse=True)[:top_n]
+            vm = _ps.virtual_memory()
+            return json.dumps({
+                'total_mem_mb':  round(vm.total  / 1024 / 1024, 1),
+                'used_mem_mb':   round(vm.used   / 1024 / 1024, 1),
+                'avail_mem_mb':  round(vm.available / 1024 / 1024, 1),
+                'mem_pct':       vm.percent,
+                'top_cpu':       top_cpu,
+                'top_mem':       top_mem,
+            })
+        except Exception as e:
+            return json.dumps({'error': f'PSUTIL_ERROR: {e}'})
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
               'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
               'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status',
               'grep_files', 'browser_nav', 'browser_snap', 'browser_action',
-              'http_request', 'git_tool']
+              'http_request', 'git_tool', 'process_snapshot']
 
 
 def build_tools_system_prompt() -> str:
