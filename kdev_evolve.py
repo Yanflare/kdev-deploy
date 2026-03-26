@@ -325,9 +325,12 @@ def run_task(task: dict, task_num: int, session_dt: str) -> str:
     - NEVER write a skill whose content is just a description of a feature to build.
     - NEVER reference mcp_toolkit, nautilus, or any external system not in KDEV tool registry.
     - EVERY skill must contain at least ONE concrete example using a real KDEV tool:
-      shell_exec, file_read, file_write, web_search, show_metrics, compare_runs,
-      memory_ls, memory_read, memory_write, ssh_exec, ssh_exec_background, ssh_tail,
-      experiment_status.
+      shell_exec, file_read, file_write, web_search, memory_ls, memory_read,
+      memory_write, ssh_exec, ssh_exec_background, ssh_tail, experiment_status,
+      compare_runs, metric_poller, grep_files, browser_nav, browser_snap,
+      browser_action, http_request, git_tool, process_snapshot.
+    - Use ONLY tool names from the list above. Any other snake_case name will be
+      rejected by the quality gate.
     - Skills must be specific to KDEV architecture. Generic tips are NOT skills.
     ## SKILL FILE FORMAT (required structure):
     ---
@@ -383,12 +386,20 @@ def resolve_path(token: str) -> str:
 
 # ── Verification gate ─────────────────────────────────────────────────────────
 
+# T1-A applied
 KDEV_REAL_TOOLS = [
     "shell_exec", "file_read", "file_write", "web_search",
-    "show_metrics", "compare_runs", "memory_ls", "memory_read",
-    "memory_write", "ssh_exec", "ssh_exec_background", "ssh_tail",
-    "experiment_status",
+    "memory_ls", "memory_read", "memory_write",
+    "ssh_exec", "ssh_exec_background", "ssh_tail",
+    "experiment_status", "compare_runs",
+    "metric_poller", "grep_files",
+    "browser_nav", "browser_snap", "browser_action",
+    "http_request", "git_tool", "process_snapshot",
 ]
+
+# Candidate tool-name pattern: word_word or word_word_word (snake_case identifiers)
+# used in quality gate to catch references to non-existent tools
+_TOOL_NAME_RE = re.compile(r'\b([a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)+)\b')
 
 BOILERPLATE_PHRASES = [
     "mcp_toolkit", "nautilus", "is_available()",
@@ -413,6 +424,32 @@ def quality_gate_skill(abs_path: str, content: str) -> tuple[bool, str]:
     for phrase in BOILERPLATE_PHRASES:
         if phrase.lower() in content_lower:
             return False, "Skill contains boilerplate phrase: " + phrase
+    # T1-A: reject skills that reference snake_case names that look like tool
+    # calls but are not in the real tool registry
+    candidate_names = set(_TOOL_NAME_RE.findall(content))
+    # Only check tokens that plausibly look like tool invocations:
+    # present in a code block line, or immediately followed by '(' or a space+path
+    invocation_re = re.compile(
+        r'(?:^|[\s`])([a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)+)\s*(?:\(|\s+[/~"\'\w])',
+        re.MULTILINE
+    )
+    invoked = set(invocation_re.findall(content))
+    # Filter: only flag names that look like kdev tools (contain underscore,
+    # all lowercase, not a common python builtin or markdown word)
+    COMMON_NON_TOOLS = {
+        "for_loop", "if_else", "try_except", "def_run", "make_sure",
+        "up_to", "set_up", "based_on", "such_as", "so_that",
+        "in_the", "of_the", "to_the", "on_the", "at_the",
+    }
+    hallucinated = [
+        name for name in invoked
+        if name not in KDEV_REAL_TOOLS
+        and name not in COMMON_NON_TOOLS
+        and len(name) >= 6
+        and name.count('_') >= 1
+    ]
+    if hallucinated:
+        return False, "Skill references unknown tool(s): " + ", ".join(sorted(hallucinated))
     return True, "ok"
 
 def verify_task(written_files: list[tuple[str, str]]) -> tuple[bool, str]:
