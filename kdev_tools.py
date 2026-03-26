@@ -1033,6 +1033,70 @@ class BrowserSnap(BaseTool):
             return json.dumps({'error': str(e)})
 
 
+# -- 18. browser_action -------------------------------------------------------
+
+@register_tool('browser_action')
+class BrowserAction(BaseTool):
+    description = (
+        'Interact with a browser tab using PinchTab: click an element, fill an input, '
+        'or press a key. Use element refs (e.g. "e5") from browser_snap output. '
+        'Requires tab_id from browser_nav. '
+        'Supported kinds: "click" (ref required), "fill" (ref + text required), "press" (key required).'
+    )
+    parameters = [
+        {'name': 'tab_id', 'type': 'string',
+         'description': 'Tab ID returned by browser_nav.', 'required': True},
+        {'name': 'kind', 'type': 'string',
+         'description': 'Action kind: "click", "fill", or "press".', 'required': True},
+        {'name': 'ref', 'type': 'string',
+         'description': 'Element ref from browser_snap (e.g. "e5"). Required for click and fill.', 'required': False},
+        {'name': 'text', 'type': 'string',
+         'description': 'Text to fill into an input element. Required for fill.', 'required': False},
+        {'name': 'key', 'type': 'string',
+         'description': 'Key to press (e.g. "Enter", "Tab"). Required for press.', 'required': False},
+    ]
+
+    def call(self, params: str, **kwargs) -> str:
+        try:
+            p = json.loads(params)
+            tab_id = p['tab_id']
+            kind   = p['kind']
+            ref    = p.get('ref', '')
+            text   = p.get('text', '')
+            key    = p.get('key', '')
+        except Exception as e:
+            return json.dumps({'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            if kind == 'click':
+                if not ref:
+                    return json.dumps({'error': 'click requires ref'})
+                body = {'kind': 'click', 'ref': ref}
+            elif kind == 'fill':
+                if not ref:
+                    return json.dumps({'error': 'fill requires ref'})
+                body = {'kind': 'fill', 'ref': ref, 'text': text}
+            elif kind == 'press':
+                if not key:
+                    return json.dumps({'error': 'press requires key'})
+                body = {'kind': 'press', 'key': key}
+            else:
+                return json.dumps({'error': f'Unknown action kind: {kind}. Use click, fill, or press.'})
+            r = requests.post(
+                f'{PINCHTAB_URL}/tabs/{tab_id}/action',
+                headers=_pinchtab_headers,
+                json=body,
+                timeout=30,
+            )
+            r.raise_for_status()
+            try:
+                result = r.json()
+            except Exception:
+                result = {'raw': r.text[:500]}
+            return json.dumps({'ok': True, 'kind': kind, 'result': result})
+        except Exception as e:
+            return json.dumps({'ok': False, 'error': str(e)})
+
+
 # -- 15. grep_files ------------------------------------------------------------
 @register_tool('grep_files')
 class GrepFiles(BaseTool):
@@ -1148,7 +1212,7 @@ class GrepFiles(BaseTool):
 KDEV_TOOLS = ['shell_exec', 'file_read', 'file_write', 'skill_save', 'web_search',
               'show_metrics', 'compare_runs', 'memory_ls', 'memory_read', 'memory_write',
               'ssh_exec', 'ssh_exec_background', 'ssh_tail', 'experiment_status',
-              'grep_files', 'browser_nav', 'browser_snap']
+              'grep_files', 'browser_nav', 'browser_snap', 'browser_action']
 
 
 def build_tools_system_prompt() -> str:
