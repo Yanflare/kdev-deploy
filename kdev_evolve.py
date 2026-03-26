@@ -255,8 +255,13 @@ def run_planning(safe_zone_content: str, past_log: str) -> str:
     ## Safe-zone file contents:
     {safe_zone_content}
 
-    ## Past evolve sessions:
+    ## Past evolve sessions (last 10 — READ CAREFULLY BEFORE PLANNING):
     {past_log}
+
+    ## BEFORE writing the plan, extract from the past sessions above:
+    ## - Every skill filename already created (YYYYMMDD-*.md entries)
+    ## - Every agent-memory section already edited
+    ## You MUST NOT propose any task that touches a file or topic already listed there.
 
     ## Your task:
     Write SESSION_PLAN.md with EXACTLY this format (max {MAX_TASKS} tasks):
@@ -274,7 +279,8 @@ def run_planning(safe_zone_content: str, past_log: str) -> str:
     Rules:
     - Each task must only touch files in the safe zone listed above.
     - Each task must be small enough to complete in one focused edit.
-    - Do not propose the same change that appears in past sessions.
+    - HARD RULE: Do NOT propose any task whose file or topic already appears in past sessions.
+    - If a skill topic was attempted but failed (reverted), that topic is still off-limits.
     - STRONGLY PREFER creating new skill files in ~/.kdev/skills/ over editing agent-memory files.
     - Only propose editing agent-memory files if you have a genuinely new, specific improvement.
     - When creating a skill, choose a topic NOT already in the skill inventory above.
@@ -503,7 +509,7 @@ def main():
 
     # Read context
     safe_zone_content = read_safe_zone()
-    past_log = read_evolve_log(last_n=5)
+    past_log = read_evolve_log(last_n=10)  # T1-B applied
 
     # ── Phase A: Plan ──────────────────────────────────────────────────────────
     try:
