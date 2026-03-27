@@ -1,0 +1,21 @@
+---
+title: Monitor Network Services
+tags: network, monitoring, system-check
+complexity: medium
+summary: This skill introduces a custom shell function to list active network services and their status.
+---
+## When to use
+Use this skill when you need to check the current state of network services running on your system.
+
+## Approach
+To monitor network services, create a shell function that uses `shell_exec` with commands such as `systemctl` or `service` to list all active services related to networking and their status. This allows for quick checks without having to manually run each command separately.
+
+## Example
+```bash
+monitor_network_services() {
+  shell_exec "systemctl --type=service --state=running | grep network"
+}
+```
+
+## Pitfalls
+Ensure that the `grep` pattern is specific enough to not return too many results, but also broad enough to capture all relevant services.
