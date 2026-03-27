@@ -1,0 +1,19 @@
+---
+title: Monitor Network Connections with Netstat
+tags: netstat, monitoring, network
+complexity: low
+summary: This skill introduces a function to monitor network connections using the 'netstat' command.
+---
+## When to use
+Use this skill when you need to check active network connections on your system.
+
+## Approach
+Utilize the shell_exec tool to run the 'netstat -anp | grep ESTABLISHED' command. This will provide information about all established network connections along with their process IDs.
+
+## Example
+```shell
+shell_exec('netstat -anp | grep ESTABLISHED')
+```
+
+## Pitfalls
+Ensure that the netstat command is available on your system and may need root privileges to see detailed connection information.
