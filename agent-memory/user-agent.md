@@ -15,6 +15,21 @@
 - Save sessions automatically when logging out or executing specific commands (e.g., save_session)
 - Log session activities with timestamps to a file
 
+## Enhance Efficiency with Custom Shell Aliases
+Custom shell aliases can significantly improve your workflow by reducing the need to type long commands repeatedly. Below are some examples of beneficial aliases that enhance efficiency and convenience:
+
+```shell
+# Example alias for frequently used commands
+alias ll='ls -l'
+alias ..='cd ..'
+
+# Alias for quick directory navigation
+alias projects="cd /path/to/projects"
+
+# Alias for running memory_write to log session activities
+alias log_activity="memory_write 'Activity: $(date)' | file_write '/path/to/log/file.log'"
+```
+
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
 - MCP tools (nautilus) unavailable on Linux; agent degrades gracefully
