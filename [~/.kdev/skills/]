@@ -1,21 +1,21 @@
 ---
-title: Monitor System Resource Usage with mpstat Command (Advanced)
+title: Monitor System Resource Usage with vmstat Command (Advanced)
 tags: [linux, system-monitoring, cpu-statistics]
 complexity: high
-summary: Use the `mpstat` command to monitor detailed CPU statistics in a Linux environment.
+summary: Use the `vmstat` command to monitor detailed CPU and memory statistics in a Linux environment.
 ---
 
 ## When to use
-When you need to inspect and understand detailed information about your system's CPU usage across multiple processors or cores.
+When you need to inspect and understand detailed information about your system's CPU and memory usage over time.
 
 ## Approach
-Use the `shell_exec` tool with the `mpstat` command. Common advanced options include `-P ALL` for monitoring all CPUs, `-I` for displaying interrupt statistics per CPU, and `-l 10` to specify an interval of 1 second with a delay between each sample (in this case, 10 samples will be collected). For continuous monitoring, you can use `mpstat -P ALL`.
+Use the `shell_exec` tool with the `vmstat` command. Common advanced options include `-w 1 -t` for monitoring updates every second with timestamps, which is useful for tracking resource usage over time. For continuous monitoring of CPU and memory statistics, you can use `vmstat -w 1`.
 
 ## Example
 ```sh
-shell_exec "mpstat -P ALL"
+shell_exec "vmstat -w 1"
 ```
-This example uses the `shell_exec` tool to run an `mpstat` command that monitors CPU usage across all available processors or cores.
+This example uses the `shell_exec` tool to run an `vmstat` command that monitors system resources including CPU and memory usage every second.
 
 ## Pitfalls
 - Ensure that the system has installed and configured the necessary utilities for running shell commands.
