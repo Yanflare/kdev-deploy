@@ -28,6 +28,10 @@ alias projects="cd /path/to/projects"
 
 # Alias for running memory_write to log session activities
 alias log_activity="memory_write 'Activity: $(date)' | file_write '/path/to/log/file.log'"
+
+# Example alias for frequently used KDEV tools
+alias save_session='save_session_command'
+alias backup_now='execute_backup'
 ```
 
 ## Known Platform Issues (Linux)
@@ -36,30 +40,21 @@ alias log_activity="memory_write 'Activity: $(date)' | file_write '/path/to/log/
 
 
 ---
-title: Enable Automatic Logging of Session Activities
+title: Enable Automatic Logging of Session Activities with Custom Shell Aliases
 tags: [session, logging, automation]
 complexity: medium
-summary: Automatically log session activities with timestamps to a file for better tracking and auditing.
+summary: Automatically log session activities with timestamps to a file for better tracking and auditing using custom shell aliases.
 ---
 ## When to use
 When you want detailed logs of session activities such as saving sessions, executing commands, and performing backups.
 
 ## Approach
-Use `memory_write` tool along with shell_exec to detect key actions like saving sessions or specific command executions. This helps in maintaining an audit trail of all significant user interactions within the session.
+Use `memory_write` tool along with shell_exec to detect key actions like saving sessions or specific command executions. Create custom shell aliases for these actions to log them automatically.
 
 ## Example
 ```shell
 # Log session activities upon saving a session or executing certain commands
-save_session_command="save_session"
-if [ "$command" == "$save_session_command" ]; then
-    memory_write "Session Saved: $(date)" | file_write "/path/to/log/file.log"
-fi
-
-# Log other significant actions as needed
-significant_action="execute_backup"
-if [ "$event" == "$significant_action" ]; then
-    memory_write "Backup Executed: $(date)" | file_write "/path/to/log/file.log"
-fi
+alias save_session='save_session_command | memory_write "Session Saved: $(date)" | file_write "/path/to/log/file.log"'
 ```
 
 ## Pitfalls
