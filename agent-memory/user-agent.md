@@ -81,15 +81,19 @@ function net_test() {
 # To test network connectivity to google.com:
 # `net_test google.com`
 
-# New custom shell aliases based on user preferences
-alias mylogs="tail -f /path/to/log/file.log" # For quick access to log files
+# New custom shell function for quick disk health monitoring using smartctl or equivalent tools.
+function disk_health() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: disk_health <device>"
+        return 1
+    fi
+    sudo smartctl -a $1 | grep -i 'model|serial|power_mode|temperature'
+}
 
-# Custom alias for searching files using grep_files tool, enhancing the ability to quickly locate specific content within filesystem.
-alias search_files='grep_files -r "search_term" /path/to/search/directory' # Using KDEV tool for searching files
-
-# Example of how this alias can be used:
-# To find all occurrences of 'example_text' in a directory named '/home/user/docs':
-# `search_files example_text /home/user/docs`
+# Example of how this function can be used:
+# To check the health status of /dev/sda:
+# `disk_health /dev/sda`
+```
 
 # Custom aliases for process management commands
 alias procs='ps aux'
@@ -99,15 +103,5 @@ alias procmon='top -b'
 alias crontab_edit="crontab -e"
 alias check_cron_jobs="crontab -l | grep -v '^#' | grep -v '^\$'"
 
-# Custom aliases for timezone commands
-alias set_timezone='sudo timedatectl set-timezone "Region/City"'
-alias show_timezone='timedatectl | grep "Time zone:"'
-
-# Enhanced file management and navigation aliases
-alias l.='ls -d .*'
-alias la='ls -A'
-alias lart='rm -rf .[^.]* *; run-parts .'
-alias lsd='ls -ld .??* *'
-
-# Custom alias for monitoring sys
+# Custom aliases for tim
 ... [truncated]
