@@ -1,0 +1,22 @@
+---
+title: Add Custom Shell Function for Quick File Listing
+tags: [shell, customization, file_listing]
+complexity: low
+summary: Adds a custom shell function to list all files and directories in a given path using a single command.
+---
+## When to use
+This skill is useful when you frequently need to quickly inspect the contents of a directory from the terminal.
+
+## Approach
+Use `file_write` to append a custom shell function to your user's `.bashrc` or equivalent file. The function will utilize `ls -aF` to list all files and directories in the specified path with additional details about each item (such as whether they are directories, symbolic links, etc.).
+
+## Example
+```shell
+function quick_ls {
+  ls -aF $1
+}
+```
+
+## Pitfalls
+Ensure that the function name does not conflict with existing aliases or functions. Also, make sure to source the `.bashrc` file after modifying it for changes to take effect.
+---
