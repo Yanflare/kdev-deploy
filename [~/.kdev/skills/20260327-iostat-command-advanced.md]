@@ -1,0 +1,21 @@
+---
+title: Use iostat Command for Advanced Disk I/O Monitoring
+tags: [system-monitoring, disk-io, linux-command-line]
+complexity: medium
+summary: Learn to use the `iostat` command with advanced options to monitor disk I/O statistics on a Linux system.
+---
+
+## When to use
+Use this skill when you need detailed information about your system's disk input/output operations. This is particularly useful for monitoring and diagnosing issues related to disk performance.
+
+## Approach
+Utilize the `shell_exec` tool in KDEV to run the `iostat -dx 1` command, which provides interval-based reports of I/O statistics by disk device. This will allow you to monitor disk activity over time and analyze any potential bottlenecks or issues.
+
+## Example
+```shell
+shell_exec('iostat -dx 1')
+```
+
+## Pitfalls
+- Ensure the `sysstat` package is installed on your system as `iostat` may not be available by default.
+- Be aware that continuous monitoring with high frequency (e.g., every second) can slightly affect system performance and disk I/O metrics.
