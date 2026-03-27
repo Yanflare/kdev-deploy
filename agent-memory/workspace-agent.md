@@ -54,14 +54,23 @@ summary: This skill describes how to handle session commands in a way that ensur
 Use this skill when you need to ensure that session-related commands work smoothly even on systems where MCP tools are unavailable.
 
 ## Approach
-Check if the necessary MCP tools are present before executing session management commands. If MCP tools are missing, perform basic cleanup and logging without attempting full session compression or other advanced operations.
+Check if the necessary MCP tools are present before executing session management commands. If MCP tools are not found, execute basic cleanup operations without performing full compression. Use `file_read` and `file_write` to handle session data.
+```python
+if mcp_toolkit.is_present():
+    # Perform full session compression using MCP tools
+else:
+    # Perform basic session cleanup using file_read and file_write
+```
 
 ## Example
+To degrade gracefully when compressing a session on Linux, use the following commands:
 ```python
-if file_read("~/.rovodev/MCP_PATH.txt"):
-    # Execute full session compression using available MCP tools.
-else:
-    # Perform basic cleanup and logging.
+session_data = file_read("~/.kdev/sessions/current/context.json")
+# Perform basic cleanup operations (e.g., remove unnecessary data)
+cleaned_session_data = {"essential_keys": session_data["essential_keys"]}
+file_write("~/.kdev/sessions/cleaned_context.json", cleaned_session_data)
 ```
+
 ## Pitfalls
-- Failing to check for MCP tool availability may lead to unnecessary errors or crashes when commands are executed on systems without these tools.
+- Ensure that the essential keys are identified correctly to avoid data loss.
+- Handle cases where `file_read` and `file_write` operations fail gracefully.
