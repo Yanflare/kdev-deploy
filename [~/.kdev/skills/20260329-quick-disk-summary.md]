@@ -1,0 +1,20 @@
+---
+title: Quick Disk Summary Skill
+tags: disk, summary, monitoring
+complexity: low
+summary: Quickly summarize disk usage statistics for efficient monitoring.
+---
+## When to use
+Use this skill when you need a quick overview of your disk space usage without diving into detailed reports.
+
+## Approach
+This skill leverages the `shell_exec` tool to run common Unix commands like `df -h`, which provides a human-readable summary of disk space usage. The output is then processed and displayed in a user-friendly format within KDEV.
+
+## Example
+```sh
+result = shell_exec("df -h")
+memory_write(result, "disk_summary.txt")
+```
+
+## Pitfalls
+Ensure that the `shell_exec` command has access to the necessary permissions to execute `df -h`. The output may vary based on the system's configuration and available disk partitions.
