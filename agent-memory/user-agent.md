@@ -37,28 +37,32 @@ alias backup_now='execute_backup'
 # Alias for quick navigation and operations in home directory
 alias homedir="cd ~"
 alias myfiles="ls -l ~/my_files_directory"
+
+# Custom aliases for network diagnostics commands
+alias ping_gw="ping -c 4 gateway_ip_address"
+alias trace_route="traceroute destination_host_name_or_IP"
 ```
 
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
 - MCP tools (nautilus) unavailable on Linux; agent degrades gracefully
 
-title: Enable Quick Navigation to Common Directories with Custom Shell Aliases
-tags: [shell, navigation, automation]
+title: Enable Quick Network Diagnostics with Custom Shell Aliases
+tags: [shell, network, diagnostics]
 complexity: low
-summary: Use custom shell aliases for quick access to commonly used directories to enhance efficiency.
+summary: Use custom shell aliases to quickly run network diagnostics commands for improved troubleshooting.
 ---
 ## When to use
-When you want to quickly navigate to your most frequently accessed directories without typing long path names.
+When you want to quickly perform common network diagnostics tasks like pinging your gateway or tracing routes.
 
 ## Approach
-Create custom shell aliases that map short commands to the full paths of your favorite directories. This reduces keystrokes and saves time when switching between projects or document folders.
+Create custom shell aliases that map short commands to frequently used network diagnostic commands. This reduces keystrokes and saves time when performing regular checks on network performance and connectivity.
 
 ## Example
 ```shell
-# Navigate directly to project directory with a simple alias command.
-alias projects="cd /path/to/projects"
+# Alias for quick ping command to the gateway IP address.
+alias ping_gw="ping -c 4 gateway_ip_address"
 ```
 
 ## Pitfalls
-- Ensure the aliases point to correct paths and update them if your file structure changes.
+- Ensure that `gateway_ip_address` is correctly set in your alias definition.
