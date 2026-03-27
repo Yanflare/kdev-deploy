@@ -1,3 +1,4 @@
+===
 ## About Me
 - Running kdev on Linux (migrated from Windows 2026-03-14)
 - Primary LLM: Ollama local, model qwen2.5-abliterate:14b-instruct-q4_K_M
@@ -8,7 +9,7 @@
 - Break down complex tasks into smaller steps
 - Break tasks into single actions without chaining unprompted
 - Avoid complex actions without explicit instructions
-- Auto-save sessions every 15 minutes to enhance user experience
+- Auto-save sessions every hour to enhance user experience
 - Automatically summarize session contents before saving using `memory_write` tool to enhance efficiency and user experience
 
 ## Known Platform Issues (Linux)
@@ -22,10 +23,10 @@ complexity: low
 summary: Automatically summarize session contents before saving to enhance user experience.
 ---
 ## When to use
-When auto-saving sessions every 15 minutes and you want an automatic summary of the session content before saving.
+When auto-saving sessions every hour and you want an automatic summary of the session content before saving.
 
 ## Approach
-Use `memory_write` tool to write a summary of the session contents just before saving. This helps in enhancing efficiency by providing a concise overview of the session activities, thus improving user experience.
+Use `memory_write` tool to write a summary of the session contents just before saving. This helps in enhancing efficiency by providing a concise overview of the session activities, thus improving user experience. Adjust the summary generation logic to include more recent activities if possible.
 
 ## Example
 ```shell
