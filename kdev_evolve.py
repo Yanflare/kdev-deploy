@@ -24,6 +24,7 @@ Run on a cron:   0 3 * * * python3 /home/yanflare/kdev-deploy/kdev_evolve.py >> 
 import os
 import sys
 import json
+import argparse
 import time
 import datetime
 import subprocess
@@ -39,7 +40,10 @@ DEPLOY_DIR   = "/home/yanflare/kdev-deploy"
 KDEV_DIR     = "/home/yanflare/.kdev"
 SKILLS_DIR   = os.path.join(KDEV_DIR, "skills")
 EVOLVE_LOG   = os.path.join(KDEV_DIR, "evolve-log.md")
-PLAN_FILE    = os.path.join(DEPLOY_DIR, "SESSION_PLAN.md")
+PLAN_FILE       = os.path.join(DEPLOY_DIR, "SESSION_PLAN.md")
+REFLECT_QUEUE   = os.path.join(KDEV_DIR, "reflect-queue.txt")
+EVENTS_LOG      = os.path.join(KDEV_DIR, "events.jsonl")
+HOP_THRESHOLD   = 10   # runs with >= this many hops go into reflect queue
 OLLAMA_URL   = "http://localhost:11434/api/generate"
 MODEL        = "huihui_ai/qwen2.5-abliterate:14b-instruct-q4_K_M"
 MAX_TASKS    = 3          # max tasks per session (14b hallucinates on long plans)
@@ -237,10 +241,15 @@ def append_journal(session_dt: str, tasks_attempted: int, tasks_ok: int, notes: 
 
 # ── Phase A: Planning ─────────────────────────────────────────────────────────
 
-def run_planning(safe_zone_content: str, past_log: str) -> str:
+def run_planning(safe_zone_content: str, past_log: str, hint: str = '') -> str:
     today_str = today()
+    hint_block = (
+        '## Priority topic from reflection queue:' + chr(10) +
+        hint + chr(10) +
+        'Strongly prefer creating a skill for this topic above all others.' + chr(10)
+    ) if hint else ''
     prompt = textwrap.dedent(f"""
-    You are KDEV's self-improvement agent running on Kiki (local Linux PC).
+    {hint_block}You are KDEV's self-improvement agent running on Kiki (local Linux PC).
     Today's date: {today_str}
     Your job: read the safe-zone files below and write a SESSION_PLAN.md.
 
@@ -478,7 +487,62 @@ def verify_task(written_files: list[tuple[str, str]]) -> tuple[bool, str]:
     return True, "ok"
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
+
+# ── Reflect mode ─────────────────────────────────────────────────────────────
+
+def run_reflect():
+    """Scan events.jsonl for high-hop or error runs and update reflect-queue.txt."""
+    if not os.path.exists(EVENTS_LOG):
+        log("[reflect] events.jsonl not found — skipping")
+        return
+    candidates = []
+    try:
+        with open(EVENTS_LOG, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except Exception as e:
+        log(f"[reflect] Could not read events.jsonl: {e}")
+        return
+    for raw in lines[-50:]:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            ev = json.loads(raw)
+        except Exception:
+            continue
+        hops = ev.get('hops', 0)
+        if hops >= HOP_THRESHOLD:
+            task = ev.get('message', '').strip()
+            if task and len(task) > 10:
+                candidates.append(task[:120])
+    if not candidates:
+        log("[reflect] No high-hop or error runs found — queue unchanged")
+        return
+    existing = set()
+    if os.path.exists(REFLECT_QUEUE):
+        with open(REFLECT_QUEUE, 'r', encoding='utf-8') as f:
+            existing = set(l.strip() for l in f if l.strip())
+    new_topics = [c for c in candidates if c not in existing]
+    if not new_topics:
+        log("[reflect] All candidates already in queue")
+        return
+    with open(REFLECT_QUEUE, 'a', encoding='utf-8') as f:
+        for topic in new_topics:
+            f.write(topic + chr(10))
+    log(f"[reflect] Added {len(new_topics)} topic(s) to reflect-queue.txt")
 def main():
+    parser = argparse.ArgumentParser(description='KDEV Self-Improvement Loop')
+    parser.add_argument('--hint', type=str, default='',
+                        help='Priority topic to prepend to Phase A prompt')
+    parser.add_argument('--reflect-queue', action='store_true',
+                        help='Run reflect-only mode: update queue then exit')
+    args = parser.parse_args()
+
+    # Reflect-only mode: update reflect-queue.txt and exit
+    if args.reflect_queue:
+        run_reflect()
+        sys.exit(0)
+
     session_dt = now()
     log(f"=== KDEV Evolve Session {session_dt} ===")
     log(f"Model: {MODEL}")
@@ -513,7 +577,7 @@ def main():
 
     # ── Phase A: Plan ──────────────────────────────────────────────────────────
     try:
-        plan_text = run_planning(safe_zone_content, past_log)
+        plan_text = run_planning(safe_zone_content, past_log, hint=args.hint)
     except Exception as e:
         log(f"Planning failed: {e}")
         append_journal(session_dt, 0, 0, f"Planning phase failed: {e}")
