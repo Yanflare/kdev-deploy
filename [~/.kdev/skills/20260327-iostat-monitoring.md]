@@ -1,0 +1,20 @@
+---
+title: Monitor System Resources with iostat Command
+tags: system-monitoring, iostat, performance-analysis
+complexity: medium
+summary: This skill provides instructions and an example for monitoring system resources using the `iostat` command.
+---
+
+## When to use
+Use this skill when you need to monitor CPU and I/O statistics of your Linux system to analyze its performance.
+
+## Approach
+To monitor system resources, use the `shell_exec` tool to run the `iostat` command with appropriate parameters. This allows for real-time analysis of disk usage and overall system load.
+
+## Example
+```yaml
+- shell_exec: "iostat -x 1"
+```
+
+## Pitfalls
+Running `iostat` frequently can introduce a small overhead on your system, impacting the very metrics you are measuring. Be mindful of this when using short intervals like `-d 1`.
