@@ -1,22 +1,22 @@
 ---
-title: Quick Process Monitoring Summary Function
+title: Enhanced Memory Usage Monitoring Skill
 tags: [linux, system-monitoring, memory-statistics]
 complexity: medium
-summary: Use the `shell_exec` tool to run a script that summarizes process monitoring data focusing on memory usage.
+summary: Use the `shell_exec` tool to run a script that sorts and summarizes processes by their memory usage.
 ---
 
 ## When to use
-When you need a quick overview of processes based on their memory usage.
+When you need an enhanced overview of running processes sorted by their memory consumption.
 
 ## Approach
-Utilize the `shell_exec` tool to execute a shell command or script that provides detailed information about running processes and focuses specifically on memory usage. You can achieve this by combining commands like `ps aux`, which gives comprehensive process statistics, with tools like `awk` for filtering and summarizing the data based on memory utilization.
+Utilize the `shell_exec` tool to execute a shell command or script that provides detailed information about running processes, focusing specifically on memory usage. This approach combines commands like `ps aux`, which gives comprehensive process statistics, with tools such as `awk` for filtering and summarizing data based on memory utilization.
 
 ## Example
 ```sh
-shell_exec "ps aux | awk '{print \$2 \"\\t\" \$3 \"\\t\" \$4 \"\\t\" \$10}'"
+shell_exec "ps aux --sort=-%mem | awk '{print \$2 \"\\t\" \$3 \"\\t\" \$4 \"\\t\" \$10}'"
 ```
-This example uses the `shell_exec` tool to run a shell command that lists process IDs, user, CPU usage, and memory usage (in %), providing a quick summary of processes based on their memory consumption.
+This example uses the `shell_exec` tool to run a shell command that lists process IDs, user, CPU usage, and memory usage (in %), sorted by descending order of memory consumption.
 
 ## Pitfalls
-- Ensure that necessary utilities such as `awk` are installed on your system.
-- Be cautious about interpreting the output correctly if you have a large number of processes or complex resource allocation.
+- Ensure necessary utilities like `awk` are installed on your system.
+- Be cautious about interpreting output correctly with a large number of processes or complex resource allocation scenarios.
