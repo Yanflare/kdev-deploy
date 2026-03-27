@@ -1,0 +1,20 @@
+---
+title: Quick Process Monitoring Using ps Command
+tags: process-monitoring, system-tools, linux-terminal
+complexity: low
+summary: Provides a skill to quickly monitor processes by listing and sorting them based on CPU usage using the `ps` command.
+---
+## When to use
+Use this skill when you need to quickly identify which processes are consuming the most CPU resources on your Linux machine.
+
+## Approach
+Utilize the shell_exec tool to run the `ps` command with options `-eo pid,ppid,cmd,%cpu,%mem --sort=-%cpu` to list and sort all running processes by their CPU usage in descending order. This provides an easy way to monitor system load and identify potential performance bottlenecks.
+
+## Example
+```
+shell_exec("ps -eo pid,ppid,cmd,%cpu,%mem --sort=-%cpu")
+```
+
+## Pitfalls
+- Ensure the `ps` command is available on your system.
+- The `-eo` option might vary depending on your version of `ps`, use `-o` if necessary.
