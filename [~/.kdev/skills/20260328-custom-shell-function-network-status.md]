@@ -1,0 +1,21 @@
+---
+title: Quick Network Interface Status Check
+tags: network, status, interface
+complexity: low
+summary: Quickly check the status of network interfaces using a custom shell function.
+---
+## When to use
+When you need to quickly assess the status of network interfaces in your system without opening additional tools or windows.
+
+## Approach
+Create a custom shell function that utilizes `shell_exec` to run commands like `ip addr show` and display the output. This allows for an immediate view of all active network interfaces and their statuses directly from the terminal.
+## Example
+```bash
+# Add this function definition in your profile script (e.g., ~/.bashrc)
+net_status() {
+  shell_exec "ip addr show"
+}
+```
+After adding the above line, source your profile script or restart your terminal session to use the `net_status` command. When you run `net_status`, it will display the status of all network interfaces.
+## Pitfalls
+Ensure that the `shell_exec` tool is available in your environment and properly configured. Also, be aware that the output might be extensive if there are many active interfaces or configurations.
