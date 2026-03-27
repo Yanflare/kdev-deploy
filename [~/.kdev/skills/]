@@ -1,21 +1,21 @@
 ---
-title: Monitor System Resource Usage with vmstat Command (Advanced)
+title: Monitor System Resource Usage with dstat Command (Advanced)
 tags: [linux, system-monitoring, resource-management]
 complexity: high
-summary: Use the `vmstat` command to monitor real-time system resource usage in a Linux environment.
+summary: Use the `dstat` command to monitor various real-time system resources in a Linux environment.
 ---
 
 ## When to use
-When you need to inspect and understand the current state of your system's resource usage including CPU, memory, swap space, I/O statistics, and process activity.
+When you need to inspect and understand detailed information about your system's resource usage including CPU, memory, disk I/O, network activity, and system processes.
 
 ## Approach
-Use the `shell_exec` tool with the `vmstat` command. Common advanced options include `-n <number>` to specify the number of iterations before exiting, `-t` to add a timestamp to each line, and `-a` to show processes in uninterruptible sleep state (usually IO-bound). For continuous monitoring with adjustable intervals, you can use `vmstat -n <number>`. Additionally, pressing specific keys within vmstat allows for further customization of displayed information.
+Use the `shell_exec` tool with the `dstat` command. Common advanced options include `-c` for CPU usage details, `-m` for memory usage statistics, `-n` for network traffic data, `-d` for disk I/O information, and `-y` to show system process activity. For continuous monitoring with adjustable intervals, you can use `dstat -cdngy`. Additionally, pressing specific keys within dstat allows further customization of the displayed information.
 
 ## Example
 ```sh
-shell_exec "vmstat -t -a 1"
+shell_exec "dstat -cndmgy 1"
 ```
-This example uses the `shell_exec` tool to run a `vmstat` command with a timestamp and processes in uninterruptible sleep state, updating every second (interval of one second between updates).
+This example uses the `shell_exec` tool to run a `dstat` command with CPU usage, network traffic, disk I/O, memory usage statistics, and system process activity, updating every second (interval of one second between updates).
 
 ## Pitfalls
 - Ensure that the system has installed and configured the necessary utilities for running shell commands.
