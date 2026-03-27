@@ -25,6 +25,7 @@ alias ..='cd ..'
 
 # Alias for quick directory navigation
 alias projects="cd /path/to/projects"
+alias documents="cd /path/to/documents"
 
 # Alias for running memory_write to log session activities
 alias log_activity="memory_write 'Activity: $(date)' | file_write '/path/to/log/file.log'"
@@ -32,31 +33,32 @@ alias log_activity="memory_write 'Activity: $(date)' | file_write '/path/to/log/
 # Example alias for frequently used KDEV tools
 alias save_session='save_session_command'
 alias backup_now='execute_backup'
+
+# Alias for quick navigation and operations in home directory
+alias homedir="cd ~"
+alias myfiles="ls -l ~/my_files_directory"
 ```
 
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
 - MCP tools (nautilus) unavailable on Linux; agent degrades gracefully
 
-
----
-title: Enable Automatic Logging of Session Activities with Custom Shell Aliases
-tags: [session, logging, automation]
-complexity: medium
-summary: Automatically log session activities with timestamps to a file for better tracking and auditing using custom shell aliases.
+title: Enable Quick Navigation to Common Directories with Custom Shell Aliases
+tags: [shell, navigation, automation]
+complexity: low
+summary: Use custom shell aliases for quick access to commonly used directories to enhance efficiency.
 ---
 ## When to use
-When you want detailed logs of session activities such as saving sessions, executing commands, and performing backups.
+When you want to quickly navigate to your most frequently accessed directories without typing long path names.
 
 ## Approach
-Use `memory_write` tool along with shell_exec to detect key actions like saving sessions or specific command executions. Create custom shell aliases for these actions to log them automatically.
+Create custom shell aliases that map short commands to the full paths of your favorite directories. This reduces keystrokes and saves time when switching between projects or document folders.
 
 ## Example
 ```shell
-# Log session activities upon saving a session or executing certain commands
-alias save_session='save_session_command | memory_write "Session Saved: $(date)" | file_write "/path/to/log/file.log"'
+# Navigate directly to project directory with a simple alias command.
+alias projects="cd /path/to/projects"
 ```
 
 ## Pitfalls
-- Ensure that the log file has sufficient permissions for writing.
-- Avoid overwhelming the user with too much logging data.
+- Ensure the aliases point to correct paths and update them if your file structure changes.
