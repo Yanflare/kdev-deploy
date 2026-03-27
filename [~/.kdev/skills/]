@@ -1,21 +1,21 @@
 ---
-title: Monitor System Processes and Resource Usage with top Command (Advanced)
-tags: [linux, system-monitoring, process-management]
+title: Monitor System Resource Usage with vmstat Command (Advanced)
+tags: [linux, system-monitoring, resource-management]
 complexity: high
-summary: Use the `top` command to monitor real-time system processes and resource usage in a Linux environment.
+summary: Use the `vmstat` command to monitor real-time system resource usage in a Linux environment.
 ---
 
 ## When to use
-When you need to inspect and understand the current state of your system's running processes along with their resource consumption, including CPU and memory.
+When you need to inspect and understand the current state of your system's resource usage including CPU, memory, swap space, I/O statistics, and process activity.
 
 ## Approach
-Use the `shell_exec` tool with the `top` command. Common advanced options include `-d <interval>` to set the delay between screen updates, `-b` for batch mode which is useful when sending output from `top` to another program or a file, and `-n <number>` to specify the number of iterations before exiting. For continuous monitoring with adjustable intervals, you can use `top -d <interval>`. Additionally, pressing specific keys within `top` allows for further customization of displayed information.
+Use the `shell_exec` tool with the `vmstat` command. Common advanced options include `-n <number>` to specify the number of iterations before exiting, `-t` to add a timestamp to each line, and `-a` to show processes in uninterruptible sleep state (usually IO-bound). For continuous monitoring with adjustable intervals, you can use `vmstat -n <number>`. Additionally, pressing specific keys within vmstat allows for further customization of displayed information.
 
 ## Example
 ```sh
-shell_exec "top -b -d 1"
+shell_exec "vmstat -t -a 1"
 ```
-This example uses the `shell_exec` tool to run a `top` command in batch mode with an interval of one second between updates.
+This example uses the `shell_exec` tool to run a `vmstat` command with a timestamp and processes in uninterruptible sleep state, updating every second (interval of one second between updates).
 
 ## Pitfalls
 - Ensure that the system has installed and configured the necessary utilities for running shell commands.
