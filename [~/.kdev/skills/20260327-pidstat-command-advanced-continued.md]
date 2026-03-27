@@ -1,0 +1,23 @@
+---
+title: Use pidstat for Process Resource Monitoring (Advanced)
+tags: linux, monitoring, performance
+complexity: high
+summary: Monitor process-related metrics such as CPU and memory usage using the pidstat command with advanced options.
+---
+
+## When to use
+Use this skill when you need detailed insights into the resource consumption of specific processes on a Linux system. This is particularly useful for troubleshooting performance issues or optimizing system resources.
+
+## Approach
+Utilize the `pidstat` command along with its advanced options to monitor CPU and memory usage of individual processes over time. Use KDEV's `ssh_exec` tool to run commands remotely and gather detailed metrics that can be further analyzed.
+
+## Example
+To monitor CPU usage for a specific process ID (PID) every 2 seconds, use the following example:
+```shell
+ssh_exec -H your_remote_host "pidstat -p PID -d 2"
+```
+Replace `your_remote_host` with the hostname or IP address of the remote system and `PID` with the actual process ID you are interested in.
+
+## Pitfalls
+- Ensure that the `sysstat` package is installed on the target machine as it provides the `pidstat` utility.
+- Monitor intervals should not be too short to avoid overwhelming the system with frequent sampling.
