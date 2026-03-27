@@ -103,5 +103,33 @@ alias procmon='top -b'
 alias crontab_edit="crontab -e"
 alias check_cron_jobs="crontab -l | grep -v '^#' | grep -v '^\$'"
 
-# Custom aliases for tim
-... [truncated]
+# Custom aliases for time tracking and logging
+alias log_time="memory_write 'Logged: $(date)' | file_write '/path/to/log/time.log'"
+alias record_activity="memory_read | file_write '/path/to/activity.log'"
+
+# New custom shell function to quickly list files in a directory using `ls` with path details
+function ls_path() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: ls_path <directory>"
+        return 1
+    fi
+    ls -l --color=auto $1 | awk '{print $9}'
+}
+
+# Example of how this function can be used:
+# To list files with paths in the current directory:
+# `ls_path .`
+
+# New custom shell function to quickly display a tree view of files and directories using `tree`
+function tree_view() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: tree_view <directory>"
+        return 1
+    fi
+    tree $1 --noreport --charset utf-8
+}
+
+# Example of how this function can be used:
+# To display a tree view in the current directory:
+# `tree_view .`
+```
