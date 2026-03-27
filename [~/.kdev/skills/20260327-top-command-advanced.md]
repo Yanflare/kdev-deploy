@@ -1,0 +1,22 @@
+---
+title: Advanced Monitoring with top Command
+tags: system-monitoring, resource-utilization, command-line-tools
+complexity: medium
+summary: This skill teaches how to use the `top` command with advanced options for detailed monitoring of system processes and resource usage.
+---
+## When to use
+Use this skill when you need a deeper understanding of your system’s performance by analyzing individual process details and identifying resource-heavy tasks.
+
+## Approach
+Utilize the `shell_exec` tool in KDEV to run the `top` command with specific options like `-b`, `-n 1`, `-p PID` for batch mode, number of iterations, and targeted process monitoring respectively. This allows for precise control over how system resources are monitored.
+
+## Example
+To monitor CPU usage of a specific process (identified by its Process ID or PID), use the following commands in KDEV:
+```shell
+shell_exec("top -b -n 1 -p <PID>")
+```
+Replace `<PID>` with the actual process ID you want to inspect. This command captures one iteration of `top` data for the specified process, providing detailed resource consumption metrics.
+
+## Pitfalls
+- Ensure that the PID provided is active and running; otherwise, the output might not reflect current system conditions.
+- Running `top` in a non-interactive mode with `-b -n 1` can produce output suitable for scripts but may miss dynamic changes observed in real-time monitoring.
