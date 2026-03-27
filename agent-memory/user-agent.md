@@ -34,35 +34,31 @@ alias log_activity="memory_write 'Activity: $(date)' | file_write '/path/to/log/
 alias save_session='save_session_command'
 alias backup_now='execute_backup'
 
-# Alias for quick navigation and operations in home directory
-alias homedir="cd ~"
-alias myfiles="ls -l ~/my_files_directory"
-
 # Custom aliases for network diagnostics commands
 alias ping_gw="ping -c 4 gateway_ip_address"
 alias trace_route="traceroute destination_host_name_or_IP"
+
+# New custom shell aliases based on user preferences
+alias mylogs="tail -f /path/to/log/file.log" # For quick access to log files
+alias search_files='grep_files -r "search_term" /path/to/search/directory' # Using KDEV tool for searching files
 ```
 
-## Known Platform Issues (Linux)
-- /memory command uses os.startfile() which is Windows-only — avoid
-- MCP tools (nautilus) unavailable on Linux; agent degrades gracefully
-
-title: Enable Quick Network Diagnostics with Custom Shell Aliases
-tags: [shell, network, diagnostics]
+title: Enable Quick File Search with Custom Shell Alias
+tags: [shell, search, efficiency]
 complexity: low
-summary: Use custom shell aliases to quickly run network diagnostics commands for improved troubleshooting.
+summary: Use custom shell aliases to quickly run file searches using the `grep_files` KDEV tool.
 ---
 ## When to use
-When you want to quickly perform common network diagnostics tasks like pinging your gateway or tracing routes.
+When you want to quickly search through files for a specific term.
 
 ## Approach
-Create custom shell aliases that map short commands to frequently used network diagnostic commands. This reduces keystrokes and saves time when performing regular checks on network performance and connectivity.
+Create custom shell alias that maps short commands to frequently used KDEV tools like `grep_files`. This reduces keystrokes and saves time when performing regular checks on file contents.
 
 ## Example
 ```shell
-# Alias for quick ping command to the gateway IP address.
-alias ping_gw="ping -c 4 gateway_ip_address"
+# Alias for quick file searching with grep_files tool.
+alias search_files='grep_files -r "search_term" /path/to/search/directory'
 ```
 
 ## Pitfalls
-- Ensure that `gateway_ip_address` is correctly set in your alias definition.
+- Ensure that the `search_term` is correctly set in your alias definition.
