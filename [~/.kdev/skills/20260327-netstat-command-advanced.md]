@@ -1,0 +1,23 @@
+---
+title: Use netstat Command for Advanced Network Monitoring
+tags: network-monitoring, system-administration, troubleshooting
+complexity: medium
+summary: This skill teaches how to use the `netstat` command with advanced options to monitor and diagnose network issues.
+---
+## When to use
+Use this skill when you need detailed information about your system's network connections, such as identifying open ports, tracking established connections, or diagnosing network traffic.
+
+## Approach
+To effectively monitor system network resources using the `netstat` command, follow these steps:
+1. Use `shell_exec` to run `netstat -anp | grep <port_number>` to see all active connections involving a specific port.
+2. For a comprehensive view of all open ports and their associated services, use `shell_exec` to execute `netstat -tulpen`.
+3. To monitor network statistics in real-time, repeatedly invoke `shell_exec` with `netstat -s`.
+
+## Example
+To list all TCP connections with process IDs using `netstat`, follow these steps:
+1. Use the following command: `shell_exec("netstat -anp | grep tcp")`
+2. This command provides a detailed view of all TCP connections, including their states and associated processes.
+
+## Pitfalls
+- Ensure that `netstat` is installed on your system to avoid execution errors.
+- Parsing output with `grep` can miss details if the pattern is not exact or too broad.
