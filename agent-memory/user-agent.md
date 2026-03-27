@@ -70,7 +70,13 @@ alias trace_route="traceroute destination_host_name_or_IP"
 
 # New custom shell aliases based on user preferences
 alias mylogs="tail -f /path/to/log/file.log" # For quick access to log files
+
+# Custom alias for searching files using grep_files tool, enhancing the ability to quickly locate specific content within filesystem.
 alias search_files='grep_files -r "search_term" /path/to/search/directory' # Using KDEV tool for searching files
+
+# Example of how this alias can be used:
+# To find all occurrences of 'example_text' in a directory named '/home/user/docs':
+# `search_files example_text /home/user/docs`
 
 # Custom aliases for process management commands
 alias procs='ps aux'
