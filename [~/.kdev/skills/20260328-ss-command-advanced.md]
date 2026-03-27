@@ -1,0 +1,20 @@
+---
+title: Advanced Network Monitoring with ss Command
+tags: network, monitoring, linux
+complexity: high
+summary: Learn to use the `ss` command for advanced network monitoring in Linux.
+---
+## When to use
+When you need detailed information about network connections and sockets on a Linux system, such as tracking down specific connection issues or analyzing traffic patterns.
+
+## Approach
+Use the `shell_exec` tool to run the `ss` command with various options to monitor different aspects of your network. For example, use `ss -t` for TCP connections, `ss -u` for UDP, and `ss -a` for all connections.
+
+## Example
+To list all TCP connections:
+```
+shell_exec("ss -ta")
+```
+
+## Pitfalls
+Be cautious with the output size when using options like `-a`, which can return a large amount of data. Additionally, ensure that the user running the command has sufficient privileges to access detailed network information.
