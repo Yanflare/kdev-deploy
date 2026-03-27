@@ -9,7 +9,7 @@
 - Break tasks into single actions without chaining unprompted
 - Avoid complex actions without explicit instructions
 - Auto-save sessions every 15 minutes to enhance user experience
-- Automatically summarize session contents before saving to enhance efficiency and user experience
+- Automatically summarize session contents before saving using `memory_write` tool to enhance efficiency and user experience
 
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
