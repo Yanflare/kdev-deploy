@@ -1,22 +1,22 @@
 ---
-title: Monitor Disk I/O Statistics with iostat Command (Advanced)
-tags: [linux, system-monitoring, disk-io-statistics]
-complexity: high
-summary: Use the `iostat` command to monitor detailed disk I/O statistics in a Linux environment.
+title: Enhanced Disk Usage Summary Function
+tags: [linux, system-monitoring, disk-statistics]
+complexity: medium
+summary: Use the `shell_exec` tool to run a script that summarizes detailed disk usage information.
 ---
 
 ## When to use
-When you need to inspect and understand detailed information about your system's disk I/O performance over time.
+When you need a comprehensive summary of your system's disk usage including total space, used space, and available space for all mounted filesystems.
 
 ## Approach
-Use the `shell_exec` tool with the `iostat` command. Common advanced options include `-d` for displaying only disk statistics, `-x` for extended statistical details, and `-t` for timestamped output. For continuous monitoring of disk I/O statistics, you can use `iostat -dx 1`.
+Utilize the `shell_exec` tool to execute a shell command or script that provides a detailed overview of disk usage across all mounted filesystems. You can achieve this by combining commands like `df -hT`, which gives human-readable output along with file system types, and using tools like `awk` for further processing.
 
 ## Example
 ```sh
-shell_exec "iostat -dx 1"
+shell_exec "df -hT | awk '{print \$1 \"\\t\" \$2 \"\\t\" \$3 \"\\t\" \$4 \"\\t\" \$5 \"\\t\" \$6}'"
 ```
-This example uses the `shell_exec` tool to run an `iostat` command that monitors detailed disk usage every second with extended statistics and timestamps.
+This example uses the `shell_exec` tool to run a shell command that provides a detailed summary of disk usage for all mounted filesystems, presenting file system type and sizes in human-readable format.
 
 ## Pitfalls
-- Ensure that the system has installed and configured the necessary utilities for running shell commands.
-- Be aware of the interval duration when using continuous monitoring as it can generate a large amount of output quickly.
+- Ensure that necessary utilities such as `awk` are installed on your system.
+- Be cautious about interpreting the output correctly, especially if you have complex mount points or large amounts of data.
