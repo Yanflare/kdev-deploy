@@ -13,38 +13,40 @@
 - Automatically summarize session contents before saving using `memory_write` tool to enhance efficiency and user experience
 - Conduct automatic network diagnostics upon session start for improved troubleshooting
 - Save sessions automatically when logging out or executing specific commands (e.g., save_session)
+- Log session activities with timestamps to a file
 
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
 - MCP tools (nautilus) unavailable on Linux; agent degrades gracefully
 
+
 ---
-title: Enable Automatic Session Backups Upon Specific Events
-tags: [session, backup, automation]
+title: Enable Automatic Logging of Session Activities
+tags: [session, logging, automation]
 complexity: medium
-summary: Automatically save session backups upon logout or specific commands to enhance user experience.
+summary: Automatically log session activities with timestamps to a file for better tracking and auditing.
 ---
 ## When to use
-When you want automatic session backups not only every hour but also when logging out or executing certain commands like `save_session`.
+When you want detailed logs of session activities such as saving sessions, executing commands, and performing backups.
 
 ## Approach
-Use `memory_write` tool along with event triggers (like shell_exec) to detect logouts and command executions. This helps in creating seamless backup experiences without manual intervention.
+Use `memory_write` tool along with shell_exec to detect key actions like saving sessions or specific command executions. This helps in maintaining an audit trail of all significant user interactions within the session.
 
 ## Example
 ```shell
-# Save session automatically upon logout or specific command execution
-logout_command="exit"
-if [ "$command" == "$logout_command" ] || [ "$event" == "logout" ]; then
-    memory_write "Session Backup: $(date)"
-fi
-
-# Trigger save_session manually if needed
+# Log session activities upon saving a session or executing certain commands
 save_session_command="save_session"
 if [ "$command" == "$save_session_command" ]; then
-    memory_write "User-initiated Session Save: $(date)"
+    memory_write "Session Saved: $(date)" | file_write "/path/to/log/file.log"
+fi
+
+# Log other significant actions as needed
+significant_action="execute_backup"
+if [ "$event" == "$significant_action" ]; then
+    memory_write "Backup Executed: $(date)" | file_write "/path/to/log/file.log"
 fi
 ```
 
 ## Pitfalls
-- Ensure that the event detection logic is robust and does not interfere with other commands.
-- Use appropriate command names as per your environment setup.
+- Ensure that the log file has sufficient permissions for writing.
+- Avoid overwhelming the user with too much logging data.
