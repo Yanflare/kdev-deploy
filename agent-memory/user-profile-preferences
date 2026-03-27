@@ -1,2 +1,6 @@
 alias sigterm="kill -SIGTERM"
 alias sighup="kill -SIGHUP"
+
+function dus {
+    shell_exec("du -sh $1")
+}
