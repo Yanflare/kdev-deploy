@@ -1,0 +1,22 @@
+---
+title: Quick Disk Space Listing Function
+tags: disk-space, ncdu, shell-function
+complexity: low
+summary: Adds a custom shell function for quick detailed disk space listing using ncdu.
+---
+## When to use
+When you need to quickly check the disk space usage of directories in a user-friendly format from the command line.
+
+## Approach
+Integrate a custom shell function that wraps around `ncdu -b` into your .bashrc or equivalent startup file. This ensures easy access and a detailed overview without manual typing.
+
+## Example
+```shell
+function quick_disk_usage() {
+    ncdu -b "$1"
+}
+```
+This function can be sourced in the user's shell configuration file for immediate use.
+
+## Pitfalls
+Ensure `ncdu` is installed on your system to avoid errors when calling the custom function.
