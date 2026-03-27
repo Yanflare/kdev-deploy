@@ -1,18 +1,21 @@
 ---
-title: Monitor Disk I/O with iostat Command
-tags: [linux, monitoring, diskio]
+title: Network Monitoring with nmap Command
+tags: [linux, network, monitoring]
 complexity: medium
-summary: Use the `iostat` command to monitor disk I/O statistics in Linux.
+summary: Use the `nmap` command to scan and analyze network connectivity.
 ---
 ## When to use
-When you need to analyze and troubleshoot issues related to disk performance in a Linux system.
+When you need to assess network topology, identify active hosts, or check open ports in a Linux system.
+
 ## Approach
-Use the `shell_exec` tool with the `iostat` command. Consider using advanced options like `-d` for displaying only device-specific statistics, or `-x` for extended statistics including CPU statistics as well. Use `ssh_exec_background` if you need continuous monitoring.
+Use the `shell_exec` tool with the `nmap` command. Common options include `-sP` for ping scanning to detect live hosts, `-p-` to scan all ports, and `-v` for verbose output. Use advanced flags such as `--open` to filter out closed ports.
+
 ## Example
 ```sh
-shell_exec "iostat -dx 5"
+shell_exec "nmap -sn 192.168.1.0/24"
 ```
-This example uses the `shell_exec` tool to run `iostat` with device-specific and extended statistics, displaying output every 5 seconds for detailed disk I/O analysis over time.
+This example uses the `shell_exec` tool to run an nmap ping scan on a specific subnet (`192.168.1.0/24`) to detect active hosts.
+
 ## Pitfalls
-- Ensure that the system has the necessary permissions to execute `iostat`.
-- Be aware of how frequently you run `iostat` as it can add some overhead to your system.
+- Ensure that the system has installed and configured the `nmap` utility.
+- Be aware of network restrictions such as firewalls or router settings that may affect nmap's performance.
