@@ -40,7 +40,7 @@ DEPLOY_DIR   = "/home/yanflare/kdev-deploy"
 KDEV_DIR     = "/home/yanflare/.kdev"
 SKILLS_DIR   = os.path.join(KDEV_DIR, "skills")
 EVOLVE_LOG   = os.path.join(KDEV_DIR, "evolve-log.md")
-PLAN_FILE       = os.path.join(DEPLOY_DIR, "SESSION_PLAN.md")
+PLAN_FILE       = "/tmp/kdev_session_plan.md"
 REFLECT_QUEUE   = os.path.join(KDEV_DIR, "reflect-queue.txt")
 EVENTS_LOG      = os.path.join(KDEV_DIR, "events.jsonl")
 HOP_THRESHOLD   = 10   # runs with >= this many hops go into reflect queue
