@@ -72,6 +72,10 @@ alias trace_route="traceroute destination_host_name_or_IP"
 alias mylogs="tail -f /path/to/log/file.log" # For quick access to log files
 alias search_files='grep_files -r "search_term" /path/to/search/directory' # Using KDEV tool for searching files
 
+# Custom aliases for process management commands
+alias procs='ps aux'
+alias procmon='top -b'
+
 # Aliases for cron management
 alias crontab_edit="crontab -e"
 alias check_cron_jobs="crontab -l | grep -v '^#' | grep -v '^\$'"
@@ -95,11 +99,12 @@ Use `timedatectl` command in combination with shell aliases for setting and show
 ## Example
 ```shell
 # Set a specific timezone, e.g., New York (America/New_York)
-set_timezone
+set_timezone 'America/New_York'
 
-# Show current timezone settings
+# Show the current timezone
 show_timezone
 ```
 
 ## Pitfalls
-- Make sure you know the correct region/city name for your desired timezone.
+- Ensure you have root privileges when setting the timezone.
+- Verify that the timezone name is correct and supported by your system.
