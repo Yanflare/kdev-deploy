@@ -786,6 +786,12 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         chat_history.append({"role": "user", "content": augmented})
     else:
         chat_history.append({"role": "user", "content": req.message})
+    # T1-D: update last_activity on every web UI message (inactivity autopilot signal)
+    try:
+        import time as _t
+        open('/home/yanflare/.kdev/last_activity', 'w').write(str(int(_t.time())))
+    except Exception:
+        pass
     model = get_model()
 
     # Messages sent to Ollama: system prompt prepended, but NOT stored in chat_history
