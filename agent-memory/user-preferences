@@ -1,0 +1,26 @@
+---
+title: Add Disk Space Monitoring Aliases
+tags: [shell, aliases, disk-monitoring]
+complexity: low
+summary: Adds custom shell aliases for monitoring disk space.
+---
+## When to use
+When you need to quickly check the disk usage of your system or a specific directory.
+
+## Approach
+Modify the user profile preferences file to include shell aliases that simplify running `df` and `du` commands. Use `file_write` tool from KDEV to edit the file directly.
+
+## Example
+```shell
+# Add dfh alias for checking disk space in human readable format
+alias dfh='df -h'
+# Add duh alias for checking directory usage in human readable format
+alias duh='du -sh *'
+```
+
+## Pitfalls
+Ensure that no existing aliases or commands conflict with the new ones added.
+---
+agent-memory/user-preferences
+alias dfh='df -h'
+alias duh='du -sh *'
