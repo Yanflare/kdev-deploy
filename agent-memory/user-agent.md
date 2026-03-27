@@ -95,4 +95,7 @@ alias l.='ls -d .*'
 alias la='ls -A'
 alias lart='rm -rf .[^.]* *; run-parts .'
 alias lsd='ls -ld .??* *'
+
+# Custom alias for monitoring system memory usage
+alias mem_usage="free -m | head -n 2" # Use KDEV shell_exec tool to monitor system memory usage
 ```
