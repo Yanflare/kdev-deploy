@@ -1,21 +1,21 @@
----
-title: Network Monitoring with nmap Command
-tags: [linux, network, monitoring]
-complexity: medium
-summary: Use the `nmap` command to scan and analyze network connectivity.
+===
+title: Monitor System Resources with mpstat Command
+tags: [linux, monitoring, system-resource]
+complexity: high
+summary: Use the `mpstat` command to monitor CPU usage by each processor core.
 ---
 ## When to use
-When you need to assess network topology, identify active hosts, or check open ports in a Linux system.
+When you need detailed information about the performance and load of individual CPU cores in a Linux system.
 
 ## Approach
-Use the `shell_exec` tool with the `nmap` command. Common options include `-sP` for ping scanning to detect live hosts, `-p-` to scan all ports, and `-v` for verbose output. Use advanced flags such as `--open` to filter out closed ports.
+Use the `shell_exec` tool with the `mpstat` command. Common options include `-P ALL` for monitoring all processors, `-I 1` to sample data every second, and `-o CSV` for outputting results in CSV format which can be easily parsed and analyzed.
 
 ## Example
 ```sh
-shell_exec "nmap -sn 192.168.1.0/24"
+shell_exec "mpstat -P ALL -I 1 -o CSV"
 ```
-This example uses the `shell_exec` tool to run an nmap ping scan on a specific subnet (`192.168.1.0/24`) to detect active hosts.
+This example uses the `shell_exec` tool to run an mpstat command that monitors CPU usage by each processor core every second, providing detailed statistics in a CSV format.
 
 ## Pitfalls
-- Ensure that the system has installed and configured the `nmap` utility.
-- Be aware of network restrictions such as firewalls or router settings that may affect nmap's performance.
+- Ensure that the system has installed and configured the `mpstat` utility.
+- Be aware of the sampling interval which can affect the accuracy and detail of the results.
