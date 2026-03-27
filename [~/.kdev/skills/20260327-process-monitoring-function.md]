@@ -1,22 +1,26 @@
 ---
-title: Monitor Processes with ps Command
+title: Monitor Processes with Custom Function
 tags: process-monitoring, system-tools, command-line
 complexity: low
-summary: Learn to monitor processes using the 'ps' command in a terminal.
+summary: Learn to monitor running processes and their resource usage using a custom shell function.
 ---
 ## When to use
-Use this skill when you need to check running processes on your system. This is useful for identifying resource usage by different processes or diagnosing performance issues.
+Use this skill when you need quick insights into the top running processes on your system, particularly their CPU and memory usage.
 
 ## Approach
-The `shell_exec` tool can be used to execute the `ps` command with various options to filter and sort process information. For example, `ps aux | grep <process_name>` allows you to find a specific process.
+Create a custom shell function named `proc_monitor` that leverages the `ps`, `sort`, and `head` commands through the `shell_exec` tool. This function will provide an easy-to-use interface for monitoring resource-intensive processes.
 
 ## Example
-To list all running processes along with their resource usage:
+To create and use the custom process monitoring function:
+
 ```shell
-shell_exec("ps aux")
+function proc_monitor() {
+  shell_exec("ps aux | sort -k3,3nr -k4,4nr | head")
+}
 ```
-This will provide an overview of each running process including its PID, CPU usage, memory usage, and the command it is executing.
+
+You can then call `proc_monitor` to get a list of top running processes sorted by CPU and memory usage.
 
 ## Pitfalls
-- Be cautious when using `grep` in combination with `ps`, as it can sometimes include `grep` itself in the output.
-- Using complex options with `ps` might require understanding of shell pipes (`|`) for filtering results effectively.
+- Ensure the custom function is added to your `.bashrc` or equivalent shell configuration file for persistent use.
+- The sort order may vary depending on system load, so check periodically for changes.
