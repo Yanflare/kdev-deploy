@@ -44,3 +44,24 @@ To manually trigger session compression after a session, users can use the follo
 /compress
 ```
 When MCP tools are unavailable (e.g., on Linux), this command will degrade gracefully and perform basic session cleanup without compressing the session data.
+
+---
+title: Graceful Degradation for Session Commands
+tags: [session-management, linux-support]
+complexity: medium
+summary: This skill describes how to handle session commands in a way that ensures graceful degradation when MCP tools are not available.
+## When to use
+Use this skill when you need to ensure that session-related commands work smoothly even on systems where MCP tools are unavailable.
+
+## Approach
+Check if the necessary MCP tools are present before executing session management commands. If MCP tools are missing, perform basic cleanup and logging without attempting full session compression or other advanced operations.
+
+## Example
+```python
+if file_read("~/.rovodev/MCP_PATH.txt"):
+    # Execute full session compression using available MCP tools.
+else:
+    # Perform basic cleanup and logging.
+```
+## Pitfalls
+- Failing to check for MCP tool availability may lead to unnecessary errors or crashes when commands are executed on systems without these tools.
