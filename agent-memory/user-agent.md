@@ -14,3 +14,26 @@
 ## Known Platform Issues (Linux)
 - /memory command uses os.startfile() which is Windows-only — avoid
 - MCP tools (nautilus) unavailable on Linux; agent degrades gracefully
+
+---
+title: Enable Automatic Session Summarization
+tags: [session, summarization, memory]
+complexity: low
+summary: Automatically summarize session contents before saving to enhance user experience.
+---
+## When to use
+When auto-saving sessions every 15 minutes and you want an automatic summary of the session content before saving.
+
+## Approach
+Use `memory_write` tool to write a summary of the session contents just before saving. This helps in enhancing efficiency by providing a concise overview of the session activities, thus improving user experience.
+
+## Example
+```shell
+# Summarize the current session and save it with an automatic label indicating the timestamp
+session_summary=$(echo "Session Summary: $(date)" && memory_read)
+memory_write "$session_summary"
+```
+
+## Pitfalls
+- Ensure that the summary is concise to avoid overwhelming the user with details.
+- Use `date` command to label summaries uniquely for easy reference.
