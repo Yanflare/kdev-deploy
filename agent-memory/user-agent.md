@@ -68,6 +68,19 @@ alias backup_now='execute_backup'
 alias ping_gw="ping -c 4 gateway_ip_address"
 alias trace_route="traceroute destination_host_name_or_IP"
 
+# New custom shell function to test network connectivity using the `ping` command
+function net_test() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: net_test <host>"
+        return 1
+    fi
+    ping -c 4 $1
+}
+
+# Example of how this alias can be used:
+# To test network connectivity to google.com:
+# `net_test google.com`
+
 # New custom shell aliases based on user preferences
 alias mylogs="tail -f /path/to/log/file.log" # For quick access to log files
 
@@ -96,6 +109,5 @@ alias la='ls -A'
 alias lart='rm -rf .[^.]* *; run-parts .'
 alias lsd='ls -ld .??* *'
 
-# Custom alias for monitoring system memory usage
-alias mem_usage="free -m | head -n 2" # Use KDEV shell_exec tool to monitor system memory usage
-```
+# Custom alias for monitoring sys
+... [truncated]
