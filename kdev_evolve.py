@@ -149,6 +149,15 @@ def read_safe_zone() -> str:
         rel = os.path.relpath(sf, KDEV_DIR)
         parts.append(f"### skills/{rel} (recent)\n{read_file_safe(sf, 800)}")
 
+    # Inject full list of auto-generated dated skill filenames for topic-cluster dedup (Session 38)
+    dated_skills = sorted(
+        f.name for f in os.scandir(SKILLS_DIR)
+        if f.is_file() and re.match(r"\d{8}-", f.name) and f.name.endswith(".md")
+    )
+    if dated_skills:
+        skill_name_block = "### AUTO-GENERATED SKILL FILENAMES (complete list — topic dedup):\n"
+        skill_name_block += "\n".join(dated_skills)
+        parts.append(skill_name_block)
     return "\n\n---\n\n".join(parts)
 
 def read_evolve_log(last_n: int = 5) -> str:
@@ -289,6 +298,12 @@ def run_planning(safe_zone_content: str, past_log: str, hint: str = '') -> str:
     - Each task must only touch files in the safe zone listed above.
     - Each task must be small enough to complete in one focused edit.
     - HARD RULE: Do NOT propose any task whose file or topic already appears in past sessions.
+    - HARD RULE: The safe-zone context above contains a complete list of AUTO-GENERATED SKILL FILENAMES.
+      Before proposing any skill, strip the date prefix and compare the topic words against every
+      entry in that list. If the topic is semantically equivalent (same tool, same concept, same
+      command) — even if the exact title differs — DO NOT propose it. Examples of forbidden
+      duplicates: vmstat-monitoring / vmstat-monitoring-function / vmstat-summary are all the same.
+      nethogs-advanced / nethogs-monitoring-function are the same. Choose a genuinely different topic.
     - If a skill topic was attempted but failed (reverted), that topic is still off-limits.
     - STRONGLY PREFER creating new skill files in ~/.kdev/skills/ over editing agent-memory files.
     - Only propose editing agent-memory files if you have a genuinely new, specific improvement.
