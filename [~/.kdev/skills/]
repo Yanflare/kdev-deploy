@@ -1,22 +1,22 @@
 ---
-title: Enhanced Memory Usage Monitoring Skill
-tags: [linux, system-monitoring, memory-statistics]
+title: Basic System Resource Monitoring Using mpstat Command
+tags: [linux, system-monitoring, cpu-statistics]
 complexity: medium
-summary: Use the `shell_exec` tool to run a script that sorts and summarizes processes by their memory usage.
+summary: Use the `shell_exec` tool to run a script that monitors CPU usage metrics using the `mpstat` command.
 ---
 
 ## When to use
-When you need an enhanced overview of running processes sorted by their memory consumption.
+When you need an overview of your system's CPU resource utilization and want detailed statistics on each processor core.
 
 ## Approach
-Utilize the `shell_exec` tool to execute a shell command or script that provides detailed information about running processes, focusing specifically on memory usage. This approach combines commands like `ps aux`, which gives comprehensive process statistics, with tools such as `awk` for filtering and summarizing data based on memory utilization.
+Utilize the `shell_exec` tool to execute the `mpstat` command, which provides comprehensive information about CPU activities. This approach allows for monitoring individual CPUs within a multi-core system, focusing specifically on CPU usage metrics like user time, system time, idle time, and other relevant statistics.
 
 ## Example
 ```sh
-shell_exec "ps aux --sort=-%mem | awk '{print \$2 \"\\t\" \$3 \"\\t\" \$4 \"\\t\" \$10}'"
+shell_exec "mpstat -P ALL"
 ```
-This example uses the `shell_exec` tool to run a shell command that lists process IDs, user, CPU usage, and memory usage (in %), sorted by descending order of memory consumption.
+This example uses the `shell_exec` tool to run a shell command that displays detailed statistics about each CPU core in the system.
 
 ## Pitfalls
-- Ensure necessary utilities like `awk` are installed on your system.
-- Be cautious about interpreting output correctly with a large number of processes or complex resource allocation scenarios.
+- Ensure necessary utilities like `mpstat` are installed on your system.
+- Be cautious about interpreting output correctly with complex multi-core architectures.
