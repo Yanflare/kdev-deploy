@@ -1,0 +1,23 @@
+---
+title: Basic System Resource Monitoring with top Command
+tags: [system-monitoring, cpu, memory]
+complexity: low
+summary: Use the `top` command to monitor system resources such as CPU and memory usage.
+---
+## When to use
+Use this skill when you need a quick overview of your system's resource utilization, particularly for identifying processes that are consuming high amounts of CPU or memory.
+
+## Approach
+Open a terminal in KDEV and run the `shell_exec` tool with the command "top" to start monitoring system resources. To focus on specific metrics like CPU or memory usage, you can interact within the top interface by pressing 'P' for process CPU percentage sorting or 'M' for memory usage.
+
+## Example
+```shell
+shell_exec("top")
+# Inside the top interface:
+# Press P to sort processes by CPU usage.
+# Press M to sort processes by memory usage.
+```
+
+## Pitfalls
+- The output of `top` can be overwhelming if there are many running processes, making it difficult to quickly identify issues.
+- Monitoring with `top` is not persistent; you need to run the command again or use an alternative method for continuous monitoring.
