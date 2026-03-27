@@ -75,24 +75,31 @@ alias search_files='grep_files -r "search_term" /path/to/search/directory' # Usi
 # Aliases for cron management
 alias crontab_edit="crontab -e"
 alias check_cron_jobs="crontab -l | grep -v '^#' | grep -v '^\$'"
+
+# Custom aliases for timezone commands
+alias set_timezone='sudo timedatectl set-timezone "Region/City"'
+alias show_timezone='timedatectl | grep "Time zone:"'
 ```
 
-title: Enable Quick File Search with Custom Shell Alias
-tags: [shell, search, efficiency]
+title: Set and Display Timezone Information Using Shell Aliases
+tags: [timezone, shell, efficiency]
 complexity: low
-summary: Use custom shell aliases to quickly run file searches using the `grep_files` KDEV tool.
+summary: Use custom shell aliases to easily set and display your system's timezone information.
 ---
 ## When to use
-When you want to quickly search through files for a specific term.
+When you need quick access to setting or displaying the current timezone on your Linux system.
 
 ## Approach
-Create custom shell alias that maps short commands to frequently used KDEV tools like `grep_files`. This reduces keystrokes and saves time when performing regular checks on file contents.
+Use `timedatectl` command in combination with shell aliases for setting and showing the timezone. This makes it easy to adjust the timezone without remembering full command syntax each time.
 
 ## Example
 ```shell
-# Alias for quick file searching with grep_files tool.
-alias search_files='grep_files -r "search_term" /path/to/search/directory'
+# Set a specific timezone, e.g., New York (America/New_York)
+set_timezone
+
+# Show current timezone settings
+show_timezone
 ```
 
 ## Pitfalls
-- Ensure that the `search_term` is correctly set in your alias definition.
+- Make sure you know the correct region/city name for your desired timezone.
