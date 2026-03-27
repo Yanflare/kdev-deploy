@@ -1,22 +1,22 @@
 ---
-title: Enhanced Disk Usage Summary Function
-tags: [linux, system-monitoring, disk-statistics]
+title: Quick Process Monitoring Summary Function
+tags: [linux, system-monitoring, memory-statistics]
 complexity: medium
-summary: Use the `shell_exec` tool to run a script that summarizes detailed disk usage information.
+summary: Use the `shell_exec` tool to run a script that summarizes process monitoring data focusing on memory usage.
 ---
 
 ## When to use
-When you need a comprehensive summary of your system's disk usage including total space, used space, and available space for all mounted filesystems.
+When you need a quick overview of processes based on their memory usage.
 
 ## Approach
-Utilize the `shell_exec` tool to execute a shell command or script that provides a detailed overview of disk usage across all mounted filesystems. You can achieve this by combining commands like `df -hT`, which gives human-readable output along with file system types, and using tools like `awk` for further processing.
+Utilize the `shell_exec` tool to execute a shell command or script that provides detailed information about running processes and focuses specifically on memory usage. You can achieve this by combining commands like `ps aux`, which gives comprehensive process statistics, with tools like `awk` for filtering and summarizing the data based on memory utilization.
 
 ## Example
 ```sh
-shell_exec "df -hT | awk '{print \$1 \"\\t\" \$2 \"\\t\" \$3 \"\\t\" \$4 \"\\t\" \$5 \"\\t\" \$6}'"
+shell_exec "ps aux | awk '{print \$2 \"\\t\" \$3 \"\\t\" \$4 \"\\t\" \$10}'"
 ```
-This example uses the `shell_exec` tool to run a shell command that provides a detailed summary of disk usage for all mounted filesystems, presenting file system type and sizes in human-readable format.
+This example uses the `shell_exec` tool to run a shell command that lists process IDs, user, CPU usage, and memory usage (in %), providing a quick summary of processes based on their memory consumption.
 
 ## Pitfalls
 - Ensure that necessary utilities such as `awk` are installed on your system.
-- Be cautious about interpreting the output correctly, especially if you have complex mount points or large amounts of data.
+- Be cautious about interpreting the output correctly if you have a large number of processes or complex resource allocation.
