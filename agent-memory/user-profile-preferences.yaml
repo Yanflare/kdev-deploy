@@ -1,22 +1,28 @@
 ---
-title: Quick Disk Space Listing Function
-tags: disk-space, ncdu, shell-function
+title: Custom Shell Function for Quick Directory Navigation
+tags: directory-navigation, shell-function, kdev-shell
 complexity: low
-summary: Adds a custom shell function for quick detailed disk space listing using ncdu.
+summary: Adds a custom shell function to quickly navigate between commonly used directories.
 ---
 ## When to use
-When you need to quickly check the disk space usage of directories in a user-friendly format from the command line.
+When you frequently switch between several directories and need a quick way to access them from the command line.
 
 ## Approach
-Integrate a custom shell function that wraps around `ncdu -b` into your .bashrc or equivalent startup file. This ensures easy access and a detailed overview without manual typing.
+Integrate a custom shell function into your .bashrc or equivalent startup file that allows easy navigation using predefined aliases. Use `shell_exec` to run these functions in KDEV's shell environment.
 
 ## Example
 ```shell
-function quick_disk_usage() {
-    ncdu -b "$1"
+function goto_dir() {
+    if [[ "$1" == "workdir" ]]; then
+        cd /path/to/workdir
+    elif [[ "$1" == "projdir" ]]; then
+        cd /path/to/projdir
+    else
+        echo "Usage: goto_dir [workdir|projdir]"
+    fi
 }
 ```
-This function can be sourced in the user's shell configuration file for immediate use.
+This function can be sourced in the user's shell configuration file and called with `goto_dir workdir` or `goto_dir projdir`.
 
 ## Pitfalls
-Ensure `ncdu` is installed on your system to avoid errors when calling the custom function.
+Ensure the directory paths are correct to avoid errors when calling the custom function.
