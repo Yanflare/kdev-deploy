@@ -42,7 +42,7 @@ AUTOPILOT_LOG       = os.path.join(KDEV_DIR, "autopilot.log")
 EVOLVE_SCRIPT       = os.path.join(DEPLOY_DIR, "kdev_evolve.py")
 
 INACTIVITY_THRESHOLD  = 600    # seconds — 10 minutes
-EVOLVE_COOLDOWN       = 21600  # seconds — 6 hours
+EVOLVE_COOLDOWN       = 7200   # seconds — 2 hours
 AUTOPILOT_POLL        = 60     # seconds between idle checks
 HOP_THRESHOLD         = 10     # hops >= this → candidate for reflect queue
 
