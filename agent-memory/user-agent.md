@@ -50,7 +50,7 @@ Custom shell aliases can significantly improve your workflow by reducing the nee
 
 ```shell
 # Example alias for frequently used commands
-alias ll='ls -l'
+alias ll='ls -l --color=auto'
 alias ..='cd ..'
 
 # Alias for quick directory navigation
@@ -83,28 +83,10 @@ alias check_cron_jobs="crontab -l | grep -v '^#' | grep -v '^\$'"
 # Custom aliases for timezone commands
 alias set_timezone='sudo timedatectl set-timezone "Region/City"'
 alias show_timezone='timedatectl | grep "Time zone:"'
+
+# Enhanced file management and navigation aliases
+alias l.='ls -d .*'
+alias la='ls -A'
+alias lart='rm -rf .[^.]* *; run-parts .'
+alias lsd='ls -ld .??* *'
 ```
-
-title: Set and Display Timezone Information Using Shell Aliases
-tags: [timezone, shell, efficiency]
-complexity: low
-summary: Use custom shell aliases to easily set and display your system's timezone information.
----
-## When to use
-When you need quick access to setting or displaying the current timezone on your Linux system.
-
-## Approach
-Use `timedatectl` command in combination with shell aliases for setting and showing the timezone. This makes it easy to adjust the timezone without remembering full command syntax each time.
-
-## Example
-```shell
-# Set a specific timezone, e.g., New York (America/New_York)
-set_timezone 'America/New_York'
-
-# Show the current timezone
-show_timezone
-```
-
-## Pitfalls
-- Ensure you have root privileges when setting the timezone.
-- Verify that the timezone name is correct and supported by your system.
