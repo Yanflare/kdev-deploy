@@ -1,0 +1,28 @@
+---
+title: Enhance Custom Shell Function for Disk Status
+tags: disk-status, shell-function, monitoring
+complexity: medium
+summary: This skill enhances the custom shell function to provide detailed disk status information quickly.
+---
+## When to use
+Use this skill when you need to monitor your disk usage more efficiently and want quick access to detailed disk status information.
+
+## Approach
+To enhance the functionality of a custom shell function for quick disk status, integrate `shell_exec` with commands such as `df -hT` and `du -sh /path/to/directory`. Additionally, add checks for filesystem errors using `fsck -n`.
+
+## Example
+```bash
+disk_status() {
+  local DISK_INFO=$(shell_exec "df -hT")
+  local DU_INFO=$(shell_exec "du -sh /")
+  local FSCK_INFO=$(shell_exec "fsck -n /dev/sda1 | grep 'Free blocks'")
+
+  echo "$DISK_INFO"
+  echo "$DU_INFO"
+  echo "$FSCK_INFO"
+}
+```
+
+## Pitfalls
+- Ensure the `disk_status` function runs under sufficient permissions to access filesystem information.
+- Be cautious about the path passed to `du -sh /path/to/directory`, as incorrect paths may yield unexpected results.
