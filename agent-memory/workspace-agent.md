@@ -1,39 +1,48 @@
 ---
-title: Enhanced Graceful Degradation for Session Commands and Cron Tasks with Additional Fallbacks
-tags: [session-management, cron-support, graceful-degradation, fallback-mechanisms]
+title: Enhanced Workspace Behavior Rules with System Health Checks
+tags: [workspace-management, system-health-checks, graceful-degradation, fallback-mechanisms]
 complexity: medium
-summary: This skill describes how to handle session commands and cron tasks in a way that ensures graceful degradation when both MCP tools and cron_tool are not available. It includes additional checks for common system utilities as fallbacks.
+summary: This skill describes how to enhance workspace behavior rules by adding checks for system health using common utilities like `dmesg`, `atop`, and `smartctl` as fallback mechanisms.
 ---
 
 ## When to use
-Use this skill when you need to ensure that session-related commands work smoothly even on systems where MCP tools, cron_tool, and other essential system utilities (like `tar` or `gzip`) are unavailable.
+Use this skill when you need to ensure that your workspace behavior adapts smoothly based on the current system health, leveraging additional checks with tools such as `dmesg`, `atop`, and `smartctl`.
 
 ## Approach
-Check if the necessary MCP tools are present before executing session management commands. If MCP tools are not found, perform basic session cleanup and compression without using these tools by leveraging shell_exec commands for fallback behavior. Additionally, check for the presence of cron_tool to handle scheduled tasks gracefully in its absence. Use common system utilities such as `tar` or `gzip` as fallbacks if these are available.
+Enhance workspace behavior rules by adding additional checks for system health. Use common utilities like `dmesg` to monitor kernel messages, `atop` for real-time resource usage, and `smartctl` for disk monitoring. These tools provide a fallback mechanism when more specific system health information is needed.
+
+```python
+if file_read(os.path.join(SYS_PATH, "tools", "dmesg")):
+    shell_exec("dmesg | grep -i error")
+else:
+    # Use an alternative method or skip the check if `dmesg` is not available
+
+if file_read(os.path.join(SYS_PATH, "tools", "atop")):
+    shell_exec("atop -b 10 > /path/to/system/usage.log &")
+else:
+    # Use an alternative method for monitoring system resource usage or skip the check if `atop` is not available
+
+if file_read(os.path.join(SYS_PATH, "tools", "smartctl")):
+    shell_exec("smartctl -a /dev/sda > /path/to/disk/health.log &")
+else:
+    # Use an alternative method for disk health checks or skip the check if `smartctl` is not available
+```
 
 ## Example
-To manually trigger session compression after a session, use the following command:
-```
-/compress
-```
-When both MCP tools and cron_tool are unavailable (e.g., on Linux), this command will degrade gracefully and perform basic session cleanup without compressing the session data. For instance, you can check if the necessary tool is present before executing:
+To monitor system resource usage and disk health in your workspace, use the following commands:
 
 ```python
-if file_read(os.path.join(MCP_PATH, "tool.exe")):
-    # Execute session management commands as usual
+if file_read(os.path.join(SYS_PATH, "tools", "atop")):
+    shell_exec("atop -b 10 > /path/to/system/usage.log &")
 else:
-    shell_exec("session_cleanup.sh")
-```
+    shell_exec("top -b -n 1 > /path/to/system/usage.log &")
 
-If `cron_tool` is also unavailable, ensure that any scheduled tasks are handled gracefully by checking for its presence and using fallback mechanisms when necessary. For example:
-
-```python
-if file_read(os.path.join(CRON_PATH, "cron_tool.exe")):
-    # Execute cron tasks as usual with cron_tool
+if file_read(os.path.join(SYS_PATH, "tools", "smartctl")):
+    shell_exec("smartctl -a /dev/sda > /path/to/disk/health.log &")
 else:
-    shell_exec("tar -czf session_data.tar.gz /path/to/session")
+    # Use an alternative method for disk health checks or skip the check if `smartctl` is not available
 ```
 
 ## Pitfalls
 - Ensure that all paths and tools referenced are checked for existence to avoid failures.
-- Users might need to manually perform additional steps if MCP tools, cron_tool, or system utilities (like `tar` or `gzip`) are not available.
+- Users might need to manually perform additional steps if system utilities like `dmesg`, `atop`, or `smartctl` are not available.
