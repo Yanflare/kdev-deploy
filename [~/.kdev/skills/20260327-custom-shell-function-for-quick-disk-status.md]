@@ -1,0 +1,21 @@
+---
+title: Quick Disk Usage Check via Custom Shell Function
+tags: disk-check, shell-function, utility
+complexity: low
+summary: Add a custom shell function to quickly check disk usage.
+---
+## When to use
+When you need a quick way to check the current status of your disk space from the command line without typing out the full `df -h` command each time.
+
+## Approach
+Create a custom shell function in your `.bashrc` or similar file that executes the `shell_exec` tool with the argument 'df -h' to display human-readable disk usage information.
+
+## Example
+```shell
+function quick_disk_status {
+  shell_exec "df -h"
+}
+```
+
+## Pitfalls
+Ensure you source your .bashrc file after adding the function or log out and back in again so that the new function is recognized.
