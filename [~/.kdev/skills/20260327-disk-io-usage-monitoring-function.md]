@@ -1,0 +1,20 @@
+---
+title: Monitor Disk I/O Usage with iostat
+tags: disk, monitoring, performance
+complexity: low
+summary: This skill demonstrates how to monitor disk I/O usage using the 'iostat' command in a KDEV environment.
+---
+## When to use
+Use this skill when you need to monitor and analyze disk I/O operations on your system for performance tuning or troubleshooting purposes.
+
+## Approach
+Utilize the `shell_exec` tool to run the 'iostat' command, which provides statistics about the system's input/output block devices. This approach is effective for gathering real-time data on disk activity.
+
+## Example
+To monitor disk I/O usage every 5 seconds, use the following KDEV shell_exec commands:
+```bash
+shell_exec("iostat -dx 5")
+```
+
+## Pitfalls
+Ensure that 'iostat' is installed on your system. This command may not be available on all systems by default and might require installation of additional packages.
