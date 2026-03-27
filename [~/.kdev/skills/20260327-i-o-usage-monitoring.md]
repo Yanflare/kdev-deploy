@@ -1,0 +1,22 @@
+---
+title: Monitor Disk I/O Usage
+tags: i/o, monitoring, disk
+complexity: medium
+summary: Efficiently monitor and summarize disk I/O usage.
+---
+## When to use
+When you need to continuously track the I/O operations performed by your system's storage devices for performance analysis or troubleshooting purposes.
+
+## Approach
+Utilize `shell_exec` with appropriate commands such as `iostat`, `iotop`, or `vmstat` to gather real-time statistics on disk I/O usage. Summarize and display this information in a readable format using `grep_files` for filtering specific data points from the command output.
+
+## Example
+```sh
+shell_exec("iostat -dx 1")
+```
+Use `grep_files` to filter out the relevant device statistics like read/write operations per second, time spent on I/O activities etc., and present them in a structured manner.
+
+## Pitfalls
+- Ensure the `iostat` command is installed and accessible in your system's PATH.
+- Continuous monitoring might introduce some overhead; adjust interval as needed.
+- Parsing output with `grep_files` may vary depending on your distribution’s version of tools.
