@@ -302,7 +302,7 @@ body{background:#0a1a1a;color:#00ffcc;font-family:'Courier New',monospace;height
 #chat{flex:1;overflow-y:scroll;padding:20px;display:flex;flex-direction:column;gap:16px;min-height:0;scrollbar-width:thin;scrollbar-color:#00ffcc44 #001a11}
 .bubble{max-width:85%;padding:10px 16px;border-radius:12px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
 .user{align-self:flex-end;background:#00ffcc22;border:1px solid #00ffcc55;color:#00ffcc}
-.assistant{align-self:flex-start;background:#003322;border:1px solid #00664433;color:#aaffcc;min-width:60px;min-height:24px}
+.assistant{align-self:flex-start;background:#003322;border:1px solid #00664433;color:#aaffcc;min-width:60px;min-height:24px;max-height:400px;overflow-y:auto;flex-shrink:0}
 #input-area{padding:16px;border-top:1px solid #00ffcc33;display:flex;gap:10px}
 #msg{flex:1;background:#001a11;border:1px solid #00ffcc44;color:#00ffcc;padding:10px 14px;border-radius:8px;font-family:inherit;font-size:1em;resize:none;outline:none}
 #msg:focus{border-color:#00ffcc99}
