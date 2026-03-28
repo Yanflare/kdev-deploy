@@ -896,7 +896,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
 
         # ── Skill save (background, non-blocking) ────────────────────────────
         if SKILLS_AVAILABLE:
-            ran_exec = hop > 0
+            ran_exec = any(t['tool'] != 'tool_list' for t in _tool_timings)
             is_complex = ran_exec
             if is_complex:
                 try:
