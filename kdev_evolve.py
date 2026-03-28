@@ -155,8 +155,23 @@ def read_safe_zone() -> str:
         if f.is_file() and re.match(r"\d{8}-", f.name) and f.name.endswith(".md")
     )
     if dated_skills:
-        skill_name_block = "### AUTO-GENERATED SKILL FILENAMES (complete list — topic dedup):\n"
-        skill_name_block += "\n".join(dated_skills)
+        TRIM = 300
+        older = dated_skills[:-TRIM] if len(dated_skills) > TRIM else []
+        recent = dated_skills[-TRIM:] if len(dated_skills) > TRIM else dated_skills
+        skill_name_block = "### AUTO-GENERATED SKILL FILENAMES (topic dedup — DO NOT REPEAT THESE TOPICS):\n"
+        if older:
+            # Extract topic words from older filenames (strip date prefix)
+            older_topics = sorted(set(
+                re.sub(r"^\d{8}-", "", f).replace(".md", "").replace("-", " ")
+                for f in older
+            ))
+            skill_name_block += f"(Older {len(older)} skills summarised — topics covered: "
+            skill_name_block += ", ".join(older_topics[:80])
+            if len(older_topics) > 80:
+                skill_name_block += f" ... and {len(older_topics) - 80} more"
+            skill_name_block += ")\n\n"
+        skill_name_block += "Recent 300 filenames (full list):\n"
+        skill_name_block += "\n".join(recent)
         parts.append(skill_name_block)
     return "\n\n---\n\n".join(parts)
 
