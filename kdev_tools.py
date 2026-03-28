@@ -12,6 +12,7 @@
 #   build_tools_system_prompt() -> str   (append to SYSTEM_PROMPT)
 
 import json
+import os
 import subprocess
 import requests
 from pathlib import Path
