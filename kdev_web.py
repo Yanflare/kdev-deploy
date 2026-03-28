@@ -897,7 +897,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         # ── Skill save (background, non-blocking) ────────────────────────────
         if SKILLS_AVAILABLE:
             ran_exec = hop > 0
-            is_complex = ran_exec or len(full) > 600
+            is_complex = ran_exec
             if is_complex:
                 try:
                     loop = asyncio.get_event_loop()
