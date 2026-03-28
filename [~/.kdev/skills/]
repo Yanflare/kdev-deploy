@@ -1,22 +1,22 @@
 ---
-title: Basic System Resource Monitoring Using mpstat Command
-tags: [linux, system-monitoring, cpu-statistics]
+title: Advanced System Resource Monitoring Using vmstat Command
+tags: [linux, system-monitoring, resource-statistics]
 complexity: medium
-summary: Use the `shell_exec` tool to run a script that monitors CPU usage metrics using the `mpstat` command.
+summary: Use the `shell_exec` tool to run a script that monitors system resources using the `vmstat` command.
 ---
 
 ## When to use
-When you need an overview of your system's CPU resource utilization and want detailed statistics on each processor core.
+When you need an overview of your system's overall resource utilization and want detailed statistics on memory usage, process activity, and disk I/O.
 
 ## Approach
-Utilize the `shell_exec` tool to execute the `mpstat` command, which provides comprehensive information about CPU activities. This approach allows for monitoring individual CPUs within a multi-core system, focusing specifically on CPU usage metrics like user time, system time, idle time, and other relevant statistics.
+Utilize the `shell_exec` tool to execute the `vmstat` command, which provides comprehensive information about system resources. This approach allows for monitoring various metrics such as processes (procs), memory usage (memory), swap space utilization, I/O statistics, system activity (system), and CPU activity (cpu). Advanced users can interpret detailed output to understand system bottlenecks.
 
 ## Example
 ```sh
-shell_exec "mpstat -P ALL"
+shell_exec "vmstat 1"
 ```
-This example uses the `shell_exec` tool to run a shell command that displays detailed statistics about each CPU core in the system.
+This example uses the `shell_exec` tool to run a shell command that displays system resource usage metrics at one-second intervals, providing real-time monitoring capabilities.
 
 ## Pitfalls
-- Ensure necessary utilities like `mpstat` are installed on your system.
-- Be cautious about interpreting output correctly with complex multi-core architectures.
+- Ensure necessary utilities like `vmstat` are installed on your system.
+- Be cautious about interpreting output correctly with complex workloads and varying system configurations.
