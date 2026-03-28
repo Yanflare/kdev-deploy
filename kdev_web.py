@@ -922,6 +922,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 'tool_calls': iteration_count,
                 'hops': hop + 1,
                 'tool_timings': _tool_timings,
+                'message': req.message[:120],
             })
             _elog = Path('/home/yanflare/.kdev/events.jsonl')
             with open(_elog, 'a', encoding='utf-8') as _ef:
