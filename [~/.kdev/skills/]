@@ -1,22 +1,22 @@
----
-title: Advanced System Resource Monitoring Using vmstat Command
-tags: [linux, system-monitoring, resource-statistics]
+===
+title: Basic Network Traffic Monitoring Using nethogs Command
+tags: [linux, network-monitoring, traffic-analysis]
 complexity: medium
-summary: Use the `shell_exec` tool to run a script that monitors system resources using the `vmstat` command.
+summary: Use the `shell_exec` tool to monitor network traffic per process using the `nethogs` command.
 ---
 
 ## When to use
-When you need an overview of your system's overall resource utilization and want detailed statistics on memory usage, process activity, and disk I/O.
+When you need to identify which processes are consuming the most bandwidth on your system and want to analyze real-time network traffic.
 
 ## Approach
-Utilize the `shell_exec` tool to execute the `vmstat` command, which provides comprehensive information about system resources. This approach allows for monitoring various metrics such as processes (procs), memory usage (memory), swap space utilization, I/O statistics, system activity (system), and CPU activity (cpu). Advanced users can interpret detailed output to understand system bottlenecks.
+Utilize the `shell_exec` tool to execute the `nethog` command, which categorizes network usage by process. This approach allows for monitoring individual network traffic contributions from different applications or services running on your system, aiding in troubleshooting high bandwidth usage issues.
 
 ## Example
 ```sh
-shell_exec "vmstat 1"
+shell_exec "nethogs -v 1"
 ```
-This example uses the `shell_exec` tool to run a shell command that displays system resource usage metrics at one-second intervals, providing real-time monitoring capabilities.
+This example uses the `shell_exec` tool to run a shell command that displays detailed information about each process’s network activity at one-second intervals, providing real-time monitoring capabilities.
 
 ## Pitfalls
-- Ensure necessary utilities like `vmstat` are installed on your system.
-- Be cautious about interpreting output correctly with complex workloads and varying system configurations.
+- Ensure necessary utilities like `nethogs` are installed on your system.
+- Be cautious about interpreting output correctly with multiple processes running concurrently.
