@@ -226,6 +226,59 @@ def parse_plan(plan_text: str) -> list[dict]:
         tasks.append({"title": title, "files": files, "description": desc})
     return tasks[:MAX_TASKS]
 
+def filter_duplicate_tasks(tasks: list[dict]) -> list[dict]:
+    """
+    Drop any proposed task whose skill topic is semantically equivalent to an
+    existing dated skill filename. Uses normalised word-overlap (Jaccard) scoring.
+    A task is dropped if overlap_score >= DEDUP_THRESHOLD.
+    """
+    DEDUP_THRESHOLD = 0.5
+
+    existing_topics = []
+    try:
+        for f in os.scandir(SKILLS_DIR):
+            if f.is_file() and re.match(r"\d{8}-", f.name) and f.name.endswith(".md"):
+                topic = re.sub(r"^\d{8}-", "", f.name).replace(".md", "")
+                words = set(topic.lower().replace("-", " ").split())
+                existing_topics.append(words)
+    except Exception:
+        return tasks  # if scan fails, don't block anything
+
+    accepted = []
+    for task in tasks:
+        files_str = task.get("files", "")
+        fname = __import__("os").path.basename(
+            re.split(r"[,\s]+", files_str.strip())[0].strip("'\"[]")
+        )
+        topic_raw = re.sub(r"^\d{8}-", "", fname).replace(".md", "")
+        proposed_words = set(topic_raw.lower().replace("-", " ").split())
+
+        if not proposed_words:
+            accepted.append(task)
+            continue
+
+        is_dup = False
+        for existing_words in existing_topics:
+            if not existing_words:
+                continue
+            union = proposed_words | existing_words
+            if not union:
+                continue
+            overlap = len(proposed_words & existing_words) / len(union)
+            if overlap >= DEDUP_THRESHOLD:
+                log(f"  [dedup] DROPPED '{task['title']}' — topic overlap {overlap:.2f} with existing skill")
+                is_dup = True
+                break
+
+        if not is_dup:
+            accepted.append(task)
+
+    dropped = len(tasks) - len(accepted)
+    if dropped:
+        log(f"  [dedup] {dropped} task(s) filtered by Python dedup gate. {len(accepted)} remaining.")
+    return accepted
+
+
 def is_safe(files_str: str) -> tuple[bool, str]:
     """
     Check that every file mentioned in the task is within the safe zone.
@@ -625,6 +678,11 @@ def main():
         os.remove(PLAN_FILE)
         return
 
+    tasks = filter_duplicate_tasks(tasks)
+    if not tasks:
+        log("All proposed tasks were duplicates — nothing to do this session.")
+        append_journal(session_dt, 0, 0, "All tasks filtered by dedup gate.")
+        return
     log(f"Tasks planned: {len(tasks)}")
     for i, t in enumerate(tasks, 1):
         log(f"  Task {i}: {t['title']} | Files: {t['files']}")
