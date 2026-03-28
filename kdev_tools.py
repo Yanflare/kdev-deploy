@@ -92,7 +92,7 @@ class FileRead(BaseTool):
         except Exception as e:
             return f'ARGS_PARSE_ERROR: {e}'
         try:
-            return Path(path).read_text(errors='replace')[:8000]
+            return Path(os.path.expanduser(path)).read_text(errors='replace')[:8000]
         except Exception as e:
             return f'FILE_READ_ERROR: {e}'
 
