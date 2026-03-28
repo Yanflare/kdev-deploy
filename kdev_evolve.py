@@ -232,7 +232,7 @@ def filter_duplicate_tasks(tasks: list[dict]) -> list[dict]:
     existing dated skill filename. Uses normalised word-overlap (Jaccard) scoring.
     A task is dropped if overlap_score >= DEDUP_THRESHOLD.
     """
-    DEDUP_THRESHOLD = 0.5
+    DEDUP_THRESHOLD = 0.35
 
     existing_topics = []
     try:
@@ -265,7 +265,8 @@ def filter_duplicate_tasks(tasks: list[dict]) -> list[dict]:
             if not union:
                 continue
             overlap = len(proposed_words & existing_words) / len(union)
-            if overlap >= DEDUP_THRESHOLD:
+            subset_hit = proposed_words.issubset(existing_words)
+            if overlap >= DEDUP_THRESHOLD or subset_hit:
                 log(f"  [dedup] DROPPED '{task['title']}' — topic overlap {overlap:.2f} with existing skill")
                 is_dup = True
                 break
