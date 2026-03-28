@@ -1,22 +1,23 @@
 ===
-title: Basic Network Traffic Monitoring Using bmon Command
+title: Basic Network Traffic Monitoring Using tcpdump Command
 tags: [linux, network-monitoring, traffic-analysis]
 complexity: medium
-summary: Use the `shell_exec` tool to monitor basic network traffic using the `bmon` command.
+summary: Use the `shell_exec` tool to capture and analyze basic network packets using the `tcpdump` command.
 ---
 
 ## When to use
-When you need to analyze your system's overall network traffic usage and want a real-time overview of bandwidth consumption.
+When you need to capture and analyze specific network packets for troubleshooting or monitoring purposes.
 
 ## Approach
-Utilize the `shell_exec` tool to execute the `bmon` command, which provides an interactive monitoring facility for network interfaces. This approach allows for observing real-time traffic statistics including incoming and outgoing data rates.
+Utilize the `shell_exec` tool to execute the `tcpdump` command, which captures packets from a network interface. This approach allows for detailed analysis of network traffic by filtering and inspecting individual packets based on various criteria such as protocol type, source/destination IP addresses, port numbers, etc.
 
 ## Example
 ```sh
-shell_exec "bmon -c 1"
+shell_exec "tcpdump -i eth0 -c 10"
 ```
-This example uses the `shell_exec` tool to run a shell command that initiates bmon in curses mode, displaying an interactive view of network traffic every second. This is useful for gaining real-time insights into bandwidth usage.
+This example uses the `shell_exec` tool to run a shell command that captures the first 10 packets from the network interface `eth0`. This is useful for analyzing specific network traffic patterns or isolating issues related to particular types of packets.
 
 ## Pitfalls
-- Ensure necessary utilities like `bmon` are installed on your system.
-- Be aware that `bmon -c 1` might not provide a continuous update if run in non-interactively; consider running it interactively or with appropriate options for continuous monitoring.
+- Ensure necessary utilities like `tcpdump` are installed on your system.
+- Be aware that specifying `-i eth0` might need adjustment depending on your actual network interface name; verify using the command `ip a`.
+- Running tcpdump with high volume or for extended periods can impact performance and should be monitored carefully.
