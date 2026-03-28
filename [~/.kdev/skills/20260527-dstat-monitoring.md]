@@ -1,0 +1,23 @@
+---
+title: Use dstat for Advanced System Resource Monitoring
+tags: system-monitoring, performance-analysis, linux-tools
+complexity: medium
+summary: This skill teaches how to use the dstat command to monitor and analyze system resources in an advanced manner.
+---
+
+## When to use
+Use this skill when you need detailed insights into your system's resource usage over time, such as CPU, memory, I/O operations, network traffic, or disk space. It is particularly useful for diagnosing performance bottlenecks or during troubleshooting sessions.
+
+## Approach
+Install dstat if not already present on your Linux machine and use it to monitor various system resources simultaneously. Utilize the `shell_exec` tool from KDEV to run dstat commands with specific intervals, capturing output in real-time. Analyze the results for trends and anomalies that could indicate performance issues or resource constraints.
+
+## Example
+To continuously monitor CPU usage, memory usage, I/O operations, network traffic, and disk space every 5 seconds:
+```shell
+shell_exec("dstat -cdngy --noheaders --nocolor | awk '{print $1,$2,$3,$4,$6}'")
+```
+This command will provide a concise output of the monitored resources at regular intervals.
+
+## Pitfalls
+- Ensure dstat is installed before running commands; otherwise, an error might occur.
+- Be aware that continuous monitoring with high interval frequency can introduce some system load itself.
