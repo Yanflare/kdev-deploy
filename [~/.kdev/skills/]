@@ -1,22 +1,22 @@
 ===
-title: Basic Network Traffic Monitoring Using nethogs Command
+title: Basic Network Traffic Monitoring Using bmon Command
 tags: [linux, network-monitoring, traffic-analysis]
 complexity: medium
-summary: Use the `shell_exec` tool to monitor network traffic per process using the `nethogs` command.
+summary: Use the `shell_exec` tool to monitor basic network traffic using the `bmon` command.
 ---
 
 ## When to use
-When you need to identify which processes are consuming the most bandwidth on your system and want to analyze real-time network traffic.
+When you need to analyze your system's overall network traffic usage and want a real-time overview of bandwidth consumption.
 
 ## Approach
-Utilize the `shell_exec` tool to execute the `nethog` command, which categorizes network usage by process. This approach allows for monitoring individual network traffic contributions from different applications or services running on your system, aiding in troubleshooting high bandwidth usage issues.
+Utilize the `shell_exec` tool to execute the `bmon` command, which provides an interactive monitoring facility for network interfaces. This approach allows for observing real-time traffic statistics including incoming and outgoing data rates.
 
 ## Example
 ```sh
-shell_exec "nethogs -v 1"
+shell_exec "bmon -c 1"
 ```
-This example uses the `shell_exec` tool to run a shell command that displays detailed information about each process’s network activity at one-second intervals, providing real-time monitoring capabilities.
+This example uses the `shell_exec` tool to run a shell command that initiates bmon in curses mode, displaying an interactive view of network traffic every second. This is useful for gaining real-time insights into bandwidth usage.
 
 ## Pitfalls
-- Ensure necessary utilities like `nethogs` are installed on your system.
-- Be cautious about interpreting output correctly with multiple processes running concurrently.
+- Ensure necessary utilities like `bmon` are installed on your system.
+- Be aware that `bmon -c 1` might not provide a continuous update if run in non-interactively; consider running it interactively or with appropriate options for continuous monitoring.
