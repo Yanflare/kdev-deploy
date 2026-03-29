@@ -428,6 +428,9 @@ def run_task(task: dict, task_num: int, session_dt: str) -> str:
       memory_write, ssh_exec, ssh_exec_background, ssh_tail, experiment_status,
       compare_runs, metric_poller, grep_files, browser_nav, browser_snap,
       browser_action, http_request, git_tool, process_snapshot.
+    - CRITICAL: memory_ls is KDEV's VFS path lister (lists virtual filesystem entries).
+      It is NOT a system memory tool. Do NOT use memory_ls to inspect RAM or swap.
+      To check system memory use shell_exec with: free -h  or  cat /proc/meminfo
     - Use ONLY tool names from the list above. Any other snake_case name will be
       rejected by the quality gate.
     - Skills must be specific to KDEV architecture. Generic tips are NOT skills.
