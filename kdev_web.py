@@ -912,6 +912,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
     async def stream():
         global chat_history
         full = ""
+        _ft_trace = []
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 async with client.stream(
@@ -939,6 +940,7 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
             return
 
         chat_history.append({"role": "assistant", "content": full})
+        _ft_trace.append({"role": "assistant", "content": full})
 
         # ── Exec loop (max MAX_EXEC_HOPS hops) ───────────────────────────────
         iteration_count = 0
@@ -964,11 +966,13 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
                 break
             yield f"data: {json.dumps({'token': f'\n\n{observation}\n\n'})}\n\n"
             # Feed result back as a user message and get next reply
+            _ft_trace.append({"role": "user", "content": observation})
             chat_history.append({"role": "user", "content": observation})
             try:
                 full = await ollama_complete(build_messages(), model)
             except Exception as e:
                 full = f"Error during exec follow-up: {e}"
+            _ft_trace.append({"role": "assistant", "content": full})
             chat_history.append({"role": "assistant", "content": full})
             # Stream the follow-up reply token by token (send as one chunk)
             yield f"data: {json.dumps({'token': full})}\n\n"
