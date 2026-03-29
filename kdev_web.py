@@ -1013,18 +1013,16 @@ async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(defa
         except Exception as _elog_err:
             print('[event-log] failed: ' + str(_elog_err), flush=True)
 
-        # -- Fine-tune data pipeline --------------------------------------
+# -- Fine-tune data pipeline --------------------------------------
         try:
             import time as _ftime
             _ft_has_tools = iteration_count > 0
             _ft_long_enough = len(full) > 100
             _ft_no_error = not full.strip().startswith('Error:')
             if _ft_has_tools and _ft_long_enough and _ft_no_error:
+                _ft_messages = [{'role': 'user', 'content': req.message}] + _ft_trace
                 _ft_record = json.dumps({
-                    'messages': [
-                        {'role': 'user', 'content': req.message},
-                        {'role': 'assistant', 'content': full},
-                    ],
+                    'messages': _ft_messages,
                     'ts': _ftime.time(),
                     'agent_run_id': agent_run_id,
                 })
