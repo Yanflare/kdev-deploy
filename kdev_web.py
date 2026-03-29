@@ -311,6 +311,12 @@ button:hover{background:#008855}
 button:disabled{opacity:.4;cursor:not-allowed}
 #compress-btn{background:#0a1a2a;border-color:#4488ff33;color:#88bbff}
 #clear-btn{background:#1a0a0a;border-color:#ff444433;color:#ff6666}
+.react-block{margin:4px 0;padding:4px 8px;border-radius:4px;font-family:monospace;font-size:0.83em;}
+.react-fn{background:#1a2a3a;border-left:3px solid #4a9eff;}
+.react-args{background:#1a2a1a;border-left:3px solid #4caf50;}
+.react-result{background:#2a1a1a;border-left:3px solid #ff7043;}
+.react-label{font-size:0.75em;opacity:0.65;display:block;margin-bottom:2px;}
+.react-out{margin:0;white-space:pre-wrap;word-break:break-word;}
 </style></head><body>
 <div id="header">
 <div><h1>&#9646; KDEV</h1><p>AI coding assistant &mdash; web interface</p></div>
@@ -345,6 +351,50 @@ const SESSION_ID=(()=>{
   console.log('[kdev] session_id='+id);
   return id;
 })();
+function formatReactBlocks(raw){
+  var FUNC='✿FUNCTION✿:';
+  var ARGS='✿ARGS✿:';
+  var RES='✿RESULT✿:';
+  var out='';
+  var rem=raw;
+  function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  while(rem.length>0){
+    var fi=rem.indexOf(FUNC);
+    if(fi===-1){out+=esc(rem);break;}
+    if(fi>0){out+=esc(rem.slice(0,fi));}
+    var afterFn=rem.slice(fi+FUNC.length);
+    var ai=afterFn.indexOf(ARGS);
+    var ri=afterFn.indexOf(RES);
+    var fi2=afterFn.indexOf(FUNC);
+    var fnEnd=afterFn.length;
+    if(ai!==-1&&ai<fnEnd)fnEnd=ai;
+    if(ri!==-1&&ri<fnEnd)fnEnd=ri;
+    if(fi2!==-1&&fi2<fnEnd)fnEnd=fi2;
+    var fnName=afterFn.slice(0,fnEnd).trim();
+    out+='<div class="react-block react-fn"><span class="react-label">fn: '+esc(fnName)+'</span></div>';
+    rem=afterFn.slice(fnEnd);
+    if(rem.indexOf(ARGS)===0){
+      var afterArgs=rem.slice(ARGS.length);
+      var ri2=afterArgs.indexOf(RES);
+      var fi3=afterArgs.indexOf(FUNC);
+      var argsEnd=afterArgs.length;
+      if(ri2!==-1&&ri2<argsEnd)argsEnd=ri2;
+      if(fi3!==-1&&fi3<argsEnd)argsEnd=fi3;
+      var argsVal=afterArgs.slice(0,argsEnd).trim();
+      out+='<div class="react-block react-args"><span class="react-label">args</span><pre class="react-out">'+esc(argsVal)+'</pre></div>';
+      rem=afterArgs.slice(argsEnd);
+    }
+    if(rem.indexOf(RES)===0){
+      var afterRes=rem.slice(RES.length);
+      var fi4=afterRes.indexOf(FUNC);
+      var resEnd=fi4!==-1?fi4:afterRes.length;
+      var resVal=afterRes.slice(0,resEnd).trim();
+      out+='<div class="react-block react-result"><span class="react-label">result</span><pre class="react-out">'+esc(resVal)+'</pre></div>';
+      rem=afterRes.slice(resEnd);
+    }
+  }
+  return out;
+}
 async function sendMsg(){
   const text=msgEl.value.trim();
   if(!text)return;
@@ -356,7 +406,7 @@ async function sendMsg(){
     const resp=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,session_id:SESSION_ID})});
     const reader=resp.body.getReader();
     const decoder=new TextDecoder();
-    let buf='',done=false;
+    let buf='',done=false,rawBuf='';
     while(!done){
       const{done:d,value}=await reader.read();
       if(d)break;
@@ -369,12 +419,13 @@ async function sendMsg(){
           if(data==='[DONE]'){done=true;break;}
           try{
             const obj=JSON.parse(data);
-            if(typeof obj.token==='string'){bubble.textContent+=obj.token;chat.scrollTop=chat.scrollHeight;}
+            if(typeof obj.token==='string'){rawBuf+=obj.token;bubble.textContent+=obj.token;chat.scrollTop=chat.scrollHeight;}
           }catch(e){console.error("SSE parse error on:",data,"err:",e.message);}
         }
       }
     }
     reader.cancel();
+    if(rawBuf.indexOf('✿')!==-1){bubble.innerHTML=formatReactBlocks(rawBuf);}
   }catch(e){bubble.textContent='Error: '+e.message;}
   sendBtn.disabled=false;
   msgEl.focus();
