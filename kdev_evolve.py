@@ -288,7 +288,7 @@ def is_safe(files_str: str) -> tuple[bool, str]:
     # Collect all token-like paths from the files string
     tokens = re.split(r"[,\s]+", files_str)
     for token in tokens:
-        token = token.strip().strip("'\"")
+        token = token.strip().strip("'\"[]").strip()
         if not token:
             continue
         # Reject anything that is a protected filename
