@@ -317,9 +317,14 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .react-result{background:#2a1a1a;border-left:3px solid #ff7043;}
 .react-label{font-size:0.75em;opacity:0.65;display:block;margin-bottom:2px;}
 .react-out{margin:0;white-space:pre-wrap;word-break:break-word;}
+.msg-time{display:block;font-size:0.68em;opacity:0.4;margin-top:4px;text-align:right;font-family:monospace;}
+.user .msg-time{text-align:right;}
+.assistant .msg-time{text-align:left;}
+#meta-bar{font-size:0.72em;opacity:0.55;margin-top:3px;font-family:monospace;letter-spacing:0.02em;}
+#meta-bar span{margin-right:14px;}
 </style></head><body>
 <div id="header">
-<div><h1>&#9646; KDEV</h1><p>AI coding assistant &mdash; web interface</p></div>
+<div><h1>&#9646; KDEV</h1><p>AI coding assistant &mdash; web interface</p><div id="meta-bar"><span id="mb-session">session: —</span><span id="mb-skills">skills: —</span></div></div>
 <form method="POST" action="/logout" style="margin:0">
 <button style="background:none;border:1px solid #ff444433;color:#ff6666;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8em" type="submit">Logout</button>
 </form></div>
@@ -339,6 +344,11 @@ function addBubble(text,cls){
   const b=document.createElement('div');
   b.className='bubble '+cls;
   b.textContent=text;
+  const ts=document.createElement('span');
+  ts.className='msg-time';
+  const now=new Date();
+  ts.textContent=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
+  b.appendChild(ts);
   chat.appendChild(b);
   chat.scrollTop=chat.scrollHeight;
   return b;
@@ -351,6 +361,12 @@ const SESSION_ID=(()=>{
   console.log('[kdev] session_id='+id);
   return id;
 })();
+fetch('/api/meta').then(r=>r.json()).then(d=>{
+  const s=document.getElementById('mb-session');
+  const k=document.getElementById('mb-skills');
+  if(s)s.textContent='session: '+d.session_prefix;
+  if(k)k.textContent='skills: '+d.skills_count;
+}).catch(()=>{});
 function formatReactBlocks(raw){
   var FUNC='✿FUNCTION✿:';
   var ARGS='✿ARGS✿:';
@@ -730,6 +746,18 @@ def prune_history(messages: list, max_chars: int = 80000) -> list:
     print(f"[prune] history {total} chars -> {total - dropped_chars} chars"
           f" (dropped {len(drop_set)} tool results)")
     return pruned
+
+@app.get("/api/meta")
+async def api_meta():
+    import os, glob, uuid
+    skills_dir = os.path.expanduser("~/.kdev/skills/")
+    try:
+        count = len(glob.glob(os.path.join(skills_dir, "*.md")))
+    except Exception:
+        count = -1
+    session_prefix = str(uuid.uuid4())[:8]
+    return {"session_prefix": session_prefix, "skills_count": count}
+
 
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest, kdev_session: str | None = Cookie(default=None)):
