@@ -237,15 +237,15 @@ def run_shell(command: str, timeout: int = 30) -> str:
     except Exception as e:
         return f"<returncode>error</returncode>\n<output>\n{e}\n</output>"
 
-async def ollama_complete(messages: list, model: str) -> str:
-    """Non-streaming Ollama call, returns full reply text."""
+async def ollama_complete(messages: list, model: str = None) -> str:
+    """Non-streaming call to TurboQuant 14B (OpenAI format)."""
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            "http://localhost:11434/api/chat",
-            json={"model": model, "messages": messages, "stream": False}
+            "http://localhost:8082/v1/chat/completions",
+            json={"messages": messages, "stream": False, "temperature": 0.2, "max_tokens": 1024}
         )
         resp.raise_for_status()
-        return resp.json()["message"]["content"]
+        return resp.json()["choices"][0]["message"]["content"]
 
 def get_config():
     cfg = {}
@@ -718,16 +718,98 @@ def redact_output(text: str) -> str:
     return text
 
 
-def dispatch_fncall(fn_name: str, args_str: str, session_id: str = 'default') -> str:
-    """Dispatch a ✿FUNCTION✿ call to the KDEV tool registry."""
-    if fn_name not in KDEV_TOOL_REGISTRY:
-        return json.dumps({'returncode': -1, 'output': f'Unknown tool: {fn_name}. Available: {list(KDEV_TOOL_REGISTRY.keys())}'})
+# Arg key aliases: maps incorrect key names 9B occasionally produces -> canonical names
+_ARG_ALIASES = {
+    'shell_exec':     {'command': 'cmd', 'shell_command': 'cmd', 'shell': 'cmd'},
+    'execute_plan':   {'command': 'cmd', 'shell_command': 'cmd'},
+    'embody_action':  {'action_command': 'cmd', 'command': 'cmd'},
+}
+
+def _normalize_args(fn_name: str, args_str: str) -> str:
+    """Rewrite any aliased arg keys to their canonical names before dispatch."""
+    aliases = _ARG_ALIASES.get(fn_name)
+    if not aliases:
+        return args_str
     try:
-        result = KDEV_TOOL_REGISTRY[fn_name]().call(args_str, session_id=session_id)
-        result = redact_output(str(result))
-        return result
-    except Exception as e:
-        return json.dumps({'returncode': -1, 'output': f'Tool dispatch error: {e}'})
+        args = json.loads(args_str)
+        for wrong, right in aliases.items():
+            if wrong in args and right not in args:
+                args[right] = args.pop(wrong)
+        return json.dumps(args)
+    except Exception:
+        return args_str  # unparseable — pass through unchanged, let tool handle it
+
+def dispatch_fncall(fn_name: str, args_str: str, session_id: str = 'default') -> str:
+    """Dispatch a ✿FUNCTION✿ call to the KDEV tool registry.
+    Phase 14: falls back to plugin manager if not in KDEV_TOOL_REGISTRY.
+    Failure hook: auto-triggers systematic_debug phase=1 on execute_* failures.
+    """
+    # ── Registry lookup: KDEV_TOOL_REGISTRY first, then plugin manager ───────
+    _EXEC_TOOLS = {'execute_plan', 'execute_shell_command_with_timeout'}
+    if fn_name in KDEV_TOOL_REGISTRY:
+        try:
+            args_str = _normalize_args(fn_name, args_str)
+            result = KDEV_TOOL_REGISTRY[fn_name]().call(args_str, session_id=session_id)
+            result = redact_output(str(result))
+        except Exception as e:
+            result = json.dumps({'returncode': -1, 'output': f'Tool dispatch error: {e}'})
+    else:
+        # ── Plugin manager fallback ───────────────────────────────────────────
+        try:
+            _pm = plugin_manager  # global, loaded at startup
+            if fn_name in _pm.tools:
+                args_str = _normalize_args(fn_name, args_str)
+                result = _pm.tools[fn_name](json.loads(args_str))
+                result = redact_output(str(result))
+            else:
+                all_tools = list(KDEV_TOOL_REGISTRY.keys()) + list(_pm.tools.keys())
+                return json.dumps({'returncode': -1, 'output': f'Unknown tool: {fn_name}. Available: {all_tools}'})
+        except Exception as e:
+            result = json.dumps({'returncode': -1, 'output': f'Plugin dispatch error: {e}'})
+
+    # ── Failure hook: auto-trigger systematic_debug on execute_* failures ─────
+    if fn_name in _EXEC_TOOLS:
+        _failed = False
+        try:
+            _r = json.loads(result)
+            if isinstance(_r, dict):
+                rc = _r.get('returncode', _r.get('exit_code', 0))
+                ok = _r.get('success', _r.get('ok', True))
+                out = _r.get('output', _r.get('stdout', '') + _r.get('stderr', ''))
+                if rc not in (0, None) or ok is False or 'error' in str(out).lower()[:40]:
+                    _failed = True
+        except Exception:
+            if 'error' in result.lower()[:80] or 'exception' in result.lower()[:80]:
+                _failed = True
+
+        if _failed:
+            try:
+                import json as _json
+                _pm2 = plugin_manager
+                _debug_args = _json.dumps({
+                    'phase': 1,
+                    'tool_name': fn_name,
+                    'args': args_str,
+                    'result': result[:800],
+                    'session_id': session_id,
+                })
+                _debug_result = _pm2.tools['systematic_debug'](_json.loads(_debug_args))
+                result = result + '\n\n[AUTO-DEBUG phase=1]\n' + str(_debug_result)
+            except Exception as _de:
+                result = result + f'\n\n[AUTO-DEBUG trigger failed: {_de}]'
+            # ── Log to agent_triggers.json ────────────────────────────────────
+            try:
+                from kdev_agent_triggers import KDEVAgentTriggers
+                KDEVAgentTriggers().fire_remote_trigger(
+                    trigger_name='systematic_debug_auto',
+                    tool_name=fn_name,
+                    session_id=session_id,
+                    reason='execute_failure',
+                )
+            except Exception as _te:
+                pass  # trigger log failure is non-fatal
+
+    return result
 
 
 def prune_history(messages: list, max_chars: int = 80000) -> list:
@@ -746,6 +828,10 @@ def prune_history(messages: list, max_chars: int = 80000) -> list:
     print(f"[prune] history {total} chars -> {total - dropped_chars} chars"
           f" (dropped {len(drop_set)} tool results)")
     return pruned
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.get("/api/meta")
 async def api_meta():

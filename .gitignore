@@ -4,3 +4,4 @@ __pycache__/
 .env
 web.log
 *.log
+*.bak*

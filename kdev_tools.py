@@ -50,7 +50,11 @@ class ShellExec(BaseTool):
     def call(self, params: str, **kwargs) -> str:
         import re as _re
         try:
-            cmd = json.loads(params)['cmd']
+            _args = json.loads(params)
+            # Alias common alternate key names the 9B occasionally sends
+            cmd = _args.get('cmd') or _args.get('command') or _args.get('shell') or _args.get('exec')
+            if not cmd:
+                return json.dumps({'returncode': -1, 'output': f'ARGS_PARSE_ERROR: no cmd/command key found in {list(_args.keys())}'})
         except Exception as e:
             return json.dumps({'returncode': -1, 'output': f'ARGS_PARSE_ERROR: {e}'})
         # T3-I pip call guard — block autonomous pip install/upgrade
@@ -1437,6 +1441,60 @@ def build_tools_system_prompt() -> str:
 
 # ── Self-test — run directly: python3 kdev_tools.py ──────────────────────────
 
+@register_tool('obsidian_write_note')
+class ObsidianWriteNote:
+    description = 'Write a markdown note into the Obsidian vault. Returns the path of the created file.'
+    parameters = [
+        {'name': 'title',     'type': 'string', 'description': 'Note title (used in YAML frontmatter and filename slug).', 'required': True},
+        {'name': 'content',   'type': 'string', 'description': 'Markdown body of the note.',                               'required': True},
+        {'name': 'note_type', 'type': 'string', 'description': 'Subfolder name inside the vault (e.g. skills, logs, dreams). Defaults to "notes".', 'required': False},
+        {'name': 'tags',      'type': 'string', 'description': 'Comma-separated tags to add to YAML frontmatter. Optional.', 'required': False},
+    ]
+    def call(self, params: str, **kwargs) -> str:
+        import json, pathlib, datetime, re
+        try:
+            p = json.loads(params)
+            title   = p.get('title',   '').strip()
+            content = p.get('content', '').strip()
+            if not title:
+                return json.dumps({'ok': False, 'error': 'ARGS_PARSE_ERROR: title is required'})
+            if not content:
+                return json.dumps({'ok': False, 'error': 'ARGS_PARSE_ERROR: content is required'})
+        except Exception as e:
+            return json.dumps({'ok': False, 'error': f'ARGS_PARSE_ERROR: {e}'})
+        try:
+            config_path = pathlib.Path.home() / '.kdev' / 'kdev_config.json'
+            vault_path  = pathlib.Path(json.loads(config_path.read_text())['obsidian_vault_path'])
+
+            # Accept 'note_type' or 'type' — 9B sometimes passes the shorter form
+            raw_type  = (p.get('note_type') or p.get('type') or 'notes').strip() or 'notes'
+            note_type = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_type).strip('_') or 'notes'
+
+            # Accept tags as a list OR a comma-separated string
+            raw_tags = p.get('tags', '')
+            if isinstance(raw_tags, list):
+                tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+            else:
+                tags = [t.strip() for t in str(raw_tags).split(',') if t.strip()] if raw_tags else []
+
+            ts   = datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+            slug = re.sub(r'[^a-zA-Z0-9_\-]', '_', title)[:60].strip('_')
+            filename = f'{ts}_{slug}.md'
+
+            out_dir = vault_path / note_type
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / filename
+
+            safe_title   = title.replace('"', '\\"')
+            tags_yaml    = ('\ntags:\n' + ''.join(f'  - {t}\n' for t in tags)) if tags else ''
+            safe_content = re.sub(r'^---', r'\---', content, flags=re.MULTILINE)
+
+            note = f'---\ntitle: "{safe_title}"\ndate: {ts}{tags_yaml}\n---\n\n{safe_content}\n'
+
+            out_path.write_text(note, encoding='utf-8')
+            return json.dumps({'ok': True, 'path': str(out_path)})
+        except Exception as e:
+            return json.dumps({'ok': False, 'error': f'ERROR: {e}'})
 if __name__ == '__main__':
     print('=== Registered tools ===')
     for name in KDEV_TOOLS:
