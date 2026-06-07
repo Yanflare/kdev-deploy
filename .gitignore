@@ -5,3 +5,6 @@ __pycache__/
 web.log
 *.log
 *.bak*
+
+# Runtime backup artifacts
+*.syspatch
